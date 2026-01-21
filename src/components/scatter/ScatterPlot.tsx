@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, useState, useMemo, useCallback } from "react";
-import { Cell } from "@/types/singleCell";
+import { Cell, CellFilterState } from "@/types/singleCell";
 import { getClusterColorRGBA } from "@/data/demoData";
+import { CellTooltip } from "./CellTooltip";
 
 interface ScatterPlotProps {
   cells: Cell[];
@@ -11,6 +12,7 @@ interface ScatterPlotProps {
   showLabels: boolean;
   opacity: number;
   clusterNames: string[];
+  cellFilter?: CellFilterState;
   onCellHover?: (cell: Cell | null) => void;
   onCellClick?: (cell: Cell) => void;
 }
@@ -43,6 +45,7 @@ export function ScatterPlot({
   showLabels,
   opacity,
   clusterNames,
+  cellFilter,
   onCellHover,
   onCellClick,
 }: ScatterPlotProps) {
@@ -53,8 +56,24 @@ export function ScatterPlot({
   const [isPanning, setIsPanning] = useState(false);
   const [panStart, setPanStart] = useState({ x: 0, y: 0 });
   const [hoveredCell, setHoveredCell] = useState<Cell | null>(null);
+  const [mousePos, setMousePos] = useState({ x: 0, y: 0 });
 
-  // Calculate data bounds
+  // Filter cells based on cellFilter
+  const filteredCells = useMemo(() => {
+    if (!cellFilter) return cells;
+    
+    return cells.filter((cell) => {
+      const sampleMatch =
+        cellFilter.selectedSamples.length === 0 ||
+        cellFilter.selectedSamples.includes(cell.metadata.sample as string);
+      const clusterMatch =
+        cellFilter.selectedClusters.length === 0 ||
+        cellFilter.selectedClusters.includes(cell.cluster);
+      return sampleMatch && clusterMatch;
+    });
+  }, [cells, cellFilter]);
+
+  // Calculate data bounds (use all cells for consistent view)
   const bounds = useMemo(() => {
     if (cells.length === 0) return { minX: -50, maxX: 50, minY: -50, maxY: 50 };
     
@@ -93,11 +112,11 @@ export function ScatterPlot({
     return { min, max };
   }, [expressionData]);
 
-  // Cluster centers for labels
+  // Cluster centers for labels (use filtered cells)
   const clusterCenters = useMemo(() => {
     const centers: Record<number, { x: number; y: number; count: number }> = {};
     
-    cells.forEach(cell => {
+    filteredCells.forEach(cell => {
       if (!centers[cell.cluster]) {
         centers[cell.cluster] = { x: 0, y: 0, count: 0 };
       }
@@ -113,7 +132,7 @@ export function ScatterPlot({
     });
     
     return centers;
-  }, [cells]);
+  }, [filteredCells]);
 
   // Convert data coordinates to canvas coordinates
   const dataToCanvas = useCallback((x: number, y: number) => {
@@ -172,10 +191,10 @@ export function ScatterPlot({
       ctx.stroke();
     }
     
-    // Draw cells
+    // Draw cells (use filtered cells)
     const scaledPointSize = pointSize * transform.scale;
     
-    cells.forEach(cell => {
+    filteredCells.forEach(cell => {
       const pos = dataToCanvas(cell.x, cell.y);
       
       // Skip if outside viewport
@@ -248,7 +267,7 @@ export function ScatterPlot({
     ctx.fillText("tSNE2", 0, 0);
     ctx.restore();
     
-  }, [cells, expressionData, selectedGene, pointSize, showClusters, showLabels, opacity, dimensions, bounds, expressionBounds, clusterCenters, transform, dataToCanvas]);
+  }, [filteredCells, expressionData, selectedGene, pointSize, showClusters, showLabels, opacity, dimensions, bounds, expressionBounds, clusterCenters, transform, dataToCanvas]);
 
   // Handle resize
   useEffect(() => {
@@ -282,19 +301,73 @@ export function ScatterPlot({
     setPanStart({ x: e.clientX - transform.x, y: e.clientY - transform.y });
   }, [transform]);
 
+  // Canvas to data coordinates (inverse of dataToCanvas)
+  const canvasToData = useCallback((canvasX: number, canvasY: number) => {
+    const { width, height } = dimensions;
+    const padding = 50;
+    const plotWidth = width - padding * 2;
+    const plotHeight = height - padding * 2;
+    
+    const scaleX = plotWidth / (bounds.maxX - bounds.minX);
+    const scaleY = plotHeight / (bounds.maxY - bounds.minY);
+    
+    // Reverse transform
+    const untransformedX = (canvasX - transform.x - width / 2) / transform.scale + width / 2;
+    const untransformedY = (canvasY - transform.y - height / 2) / transform.scale + height / 2;
+    
+    const dataX = (untransformedX - padding) / scaleX + bounds.minX;
+    const dataY = bounds.maxY - (untransformedY - padding) / scaleY;
+    
+    return { x: dataX, y: dataY };
+  }, [dimensions, bounds, transform]);
+
   const handleMouseMove = useCallback((e: React.MouseEvent) => {
+    const rect = canvasRef.current?.getBoundingClientRect();
+    if (!rect) return;
+    
+    const canvasX = e.clientX - rect.left;
+    const canvasY = e.clientY - rect.top;
+    
+    setMousePos({ x: canvasX, y: canvasY });
+    
     if (isPanning) {
       setTransform(prev => ({
         ...prev,
         x: e.clientX - panStart.x,
         y: e.clientY - panStart.y,
       }));
+    } else {
+      // Find cell under cursor
+      const dataPos = canvasToData(canvasX, canvasY);
+      const threshold = 2 / transform.scale; // Scale-adjusted threshold
+      
+      let closestCell: Cell | null = null;
+      let closestDist = Infinity;
+      
+      for (const cell of filteredCells) {
+        const dist = Math.sqrt(
+          Math.pow(cell.x - dataPos.x, 2) + Math.pow(cell.y - dataPos.y, 2)
+        );
+        if (dist < threshold && dist < closestDist) {
+          closestDist = dist;
+          closestCell = cell;
+        }
+      }
+      
+      setHoveredCell(closestCell);
+      onCellHover?.(closestCell);
     }
-  }, [isPanning, panStart]);
+  }, [isPanning, panStart, canvasToData, transform.scale, filteredCells, onCellHover]);
 
   const handleMouseUp = useCallback(() => {
     setIsPanning(false);
   }, []);
+
+  const handleClick = useCallback((e: React.MouseEvent) => {
+    if (hoveredCell && onCellClick) {
+      onCellClick(hoveredCell);
+    }
+  }, [hoveredCell, onCellClick]);
 
   const handleDoubleClick = useCallback(() => {
     setTransform({ x: 0, y: 0, scale: 1 });
@@ -309,13 +382,17 @@ export function ScatterPlot({
         ref={canvasRef}
         width={dimensions.width}
         height={dimensions.height}
-        className="cursor-grab active:cursor-grabbing"
+        className={hoveredCell ? "cursor-pointer" : "cursor-grab active:cursor-grabbing"}
         onWheel={handleWheel}
         onMouseDown={handleMouseDown}
         onMouseMove={handleMouseMove}
         onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseUp}
+        onMouseLeave={() => {
+          handleMouseUp();
+          setHoveredCell(null);
+        }}
         onDoubleClick={handleDoubleClick}
+        onClick={handleClick}
       />
       
       {/* Zoom controls */}
@@ -352,6 +429,19 @@ export function ScatterPlot({
           </div>
         </div>
       )}
+
+      {/* Cell tooltip */}
+      <CellTooltip
+        cell={hoveredCell}
+        position={mousePos}
+        clusterName={hoveredCell ? clusterNames[hoveredCell.cluster] : undefined}
+        expressionValue={
+          hoveredCell && expressionData
+            ? expressionData.get(hoveredCell.id)
+            : undefined
+        }
+        geneName={selectedGene ?? undefined}
+      />
     </div>
   );
 }

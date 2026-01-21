@@ -48,11 +48,18 @@ export interface SingleCellDataset {
 
 export type ColorPalette = 'viridis' | 'magma' | 'plasma' | 'inferno' | 'grrd' | 'blues';
 
+export interface CellFilterState {
+  selectedSamples: string[];
+  selectedClusters: number[];
+}
+
 export interface VisualizationSettings {
   pointSize: number;
   showClusters: boolean;
   showLabels: boolean;
   colorPalette: ColorPalette;
   selectedGene: string | null;
+  selectedGenes: string[];
   opacity: number;
+  cellFilter: CellFilterState;
 }

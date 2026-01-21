@@ -2,12 +2,14 @@ import React, { useState, useMemo, useCallback } from "react";
 import { Header } from "@/components/layout/Header";
 import { ScatterPlot } from "@/components/scatter/ScatterPlot";
 import { ControlPanel } from "@/components/controls/ControlPanel";
+import { CellFilter, CellFilterState } from "@/components/controls/CellFilter";
 import { DifferentialExpressionTable } from "@/components/table/DifferentialExpressionTable";
 import { ViolinPlot } from "@/components/plots/ViolinPlot";
 import { FeaturePlot } from "@/components/plots/FeaturePlot";
+import { DotPlot } from "@/components/plots/DotPlot";
 import { DatasetUploader } from "@/components/upload/DatasetUploader";
 import { generateDemoDataset, getGeneExpression } from "@/data/demoData";
-import { VisualizationSettings, SingleCellDataset } from "@/types/singleCell";
+import { VisualizationSettings, SingleCellDataset, CellFilterState as CellFilterType } from "@/types/singleCell";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -24,6 +26,11 @@ const defaultDataset2: SingleCellDataset = {
   }
 };
 
+const defaultCellFilter: CellFilterType = {
+  selectedSamples: [],
+  selectedClusters: [],
+};
+
 const Index = () => {
   const [showSideBySide, setShowSideBySide] = useState(false);
   const [dataset1, setDataset1] = useState<SingleCellDataset>(defaultDataset1);
@@ -36,7 +43,9 @@ const Index = () => {
     showLabels: true,
     colorPalette: "viridis",
     selectedGene: null,
+    selectedGenes: [],
     opacity: 0.8,
+    cellFilter: defaultCellFilter,
   });
 
   // Settings for right panel (side-by-side mode)
@@ -46,7 +55,9 @@ const Index = () => {
     showLabels: true,
     colorPalette: "viridis",
     selectedGene: null,
+    selectedGenes: [],
     opacity: 0.8,
+    cellFilter: defaultCellFilter,
   });
 
   const handleSettingsChange1 = useCallback(
@@ -75,12 +86,12 @@ const Index = () => {
 
   const handleDatasetLoad1 = useCallback((newDataset: SingleCellDataset) => {
     setDataset1(newDataset);
-    setSettings1(prev => ({ ...prev, selectedGene: null }));
+    setSettings1(prev => ({ ...prev, selectedGene: null, selectedGenes: [], cellFilter: defaultCellFilter }));
   }, []);
 
   const handleDatasetLoad2 = useCallback((newDataset: SingleCellDataset) => {
     setDataset2(newDataset);
-    setSettings2(prev => ({ ...prev, selectedGene: null }));
+    setSettings2(prev => ({ ...prev, selectedGene: null, selectedGenes: [], cellFilter: defaultCellFilter }));
   }, []);
 
   const handleGeneClick1 = useCallback((gene: string) => {
@@ -160,6 +171,7 @@ const Index = () => {
                     showLabels={settings1.showLabels}
                     opacity={settings1.opacity}
                     clusterNames={clusterNames1}
+                    cellFilter={settings1.cellFilter}
                   />
                 </div>
                 <ControlPanel
@@ -167,6 +179,12 @@ const Index = () => {
                   clusters={dataset1.clusters}
                   settings={settings1}
                   onSettingsChange={handleSettingsChange1}
+                />
+                <CellFilter
+                  cells={dataset1.cells}
+                  clusters={dataset1.clusters}
+                  filter={settings1.cellFilter}
+                  onFilterChange={(filter) => handleSettingsChange1({ cellFilter: filter })}
                 />
                 {settings1.selectedGene && (
                   <ViolinPlot 
@@ -195,6 +213,7 @@ const Index = () => {
                     showLabels={settings2.showLabels}
                     opacity={settings2.opacity}
                     clusterNames={clusterNames2}
+                    cellFilter={settings2.cellFilter}
                   />
                 </div>
                 <ControlPanel
@@ -202,6 +221,12 @@ const Index = () => {
                   clusters={dataset2.clusters}
                   settings={settings2}
                   onSettingsChange={handleSettingsChange2}
+                />
+                <CellFilter
+                  cells={dataset2.cells}
+                  clusters={dataset2.clusters}
+                  filter={settings2.cellFilter}
+                  onFilterChange={(filter) => handleSettingsChange2({ cellFilter: filter })}
                 />
                 {settings2.selectedGene && (
                   <ViolinPlot 
@@ -229,12 +254,18 @@ const Index = () => {
           // Single view layout
           <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
             {/* Control Panel - Left Sidebar */}
-            <div className="lg:col-span-1 order-2 lg:order-1">
+            <div className="lg:col-span-1 order-2 lg:order-1 space-y-4">
               <ControlPanel
                 genes={dataset1.genes}
                 clusters={dataset1.clusters}
                 settings={settings1}
                 onSettingsChange={handleSettingsChange1}
+              />
+              <CellFilter
+                cells={dataset1.cells}
+                clusters={dataset1.clusters}
+                filter={settings1.cellFilter}
+                onFilterChange={(filter) => handleSettingsChange1({ cellFilter: filter })}
               />
             </div>
 
@@ -251,32 +282,57 @@ const Index = () => {
                   showLabels={settings1.showLabels}
                   opacity={settings1.opacity}
                   clusterNames={clusterNames1}
+                  cellFilter={settings1.cellFilter}
                 />
               </div>
 
-              {/* Violin and Feature Plots */}
-              {settings1.selectedGene && (
-                <Tabs defaultValue="violin" className="w-full">
-                  <TabsList>
-                    <TabsTrigger value="violin">Violin Plot</TabsTrigger>
-                    <TabsTrigger value="feature">Feature Plot</TabsTrigger>
-                  </TabsList>
-                  <TabsContent value="violin">
+              {/* Expression Plots */}
+              <Tabs defaultValue="violin" className="w-full">
+                <TabsList>
+                  <TabsTrigger value="violin" disabled={!settings1.selectedGene}>
+                    Violin Plot
+                  </TabsTrigger>
+                  <TabsTrigger value="feature" disabled={!settings1.selectedGene}>
+                    Feature Plot
+                  </TabsTrigger>
+                  <TabsTrigger value="dotplot">
+                    Dot Plot
+                  </TabsTrigger>
+                </TabsList>
+                <TabsContent value="violin">
+                  {settings1.selectedGene ? (
                     <ViolinPlot 
                       cells={dataset1.cells} 
                       gene={settings1.selectedGene} 
                       clusters={dataset1.clusters}
                     />
-                  </TabsContent>
-                  <TabsContent value="feature">
+                  ) : (
+                    <div className="bg-card border border-border rounded-lg p-8 text-center">
+                      <p className="text-muted-foreground">Select a gene to display violin plot</p>
+                    </div>
+                  )}
+                </TabsContent>
+                <TabsContent value="feature">
+                  {settings1.selectedGene ? (
                     <FeaturePlot 
                       cells={dataset1.cells} 
                       gene={settings1.selectedGene} 
                       clusters={dataset1.clusters}
                     />
-                  </TabsContent>
-                </Tabs>
-              )}
+                  ) : (
+                    <div className="bg-card border border-border rounded-lg p-8 text-center">
+                      <p className="text-muted-foreground">Select a gene to display feature plot</p>
+                    </div>
+                  )}
+                </TabsContent>
+                <TabsContent value="dotplot">
+                  <DotPlot
+                    cells={dataset1.cells}
+                    genes={settings1.selectedGenes}
+                    clusters={dataset1.clusters}
+                  />
+                </TabsContent>
+              </Tabs>
 
               {/* Differential Expression Table */}
               <DifferentialExpressionTable
