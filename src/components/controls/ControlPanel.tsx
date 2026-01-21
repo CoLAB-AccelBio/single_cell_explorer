@@ -1,9 +1,9 @@
 import React from "react";
 import { GeneSearch } from "./GeneSearch";
+import { MultiGeneSearch } from "./MultiGeneSearch";
 import { Slider } from "@/components/ui/slider";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ClusterInfo, VisualizationSettings } from "@/types/singleCell";
 
 interface ControlPanelProps {
@@ -22,11 +22,21 @@ export function ControlPanel({
   return (
     <div className="space-y-6 p-4 bg-card border border-border rounded-lg">
       <div>
-        <h3 className="text-sm font-semibold text-foreground mb-3">Gene Expression</h3>
+        <h3 className="text-sm font-semibold text-foreground mb-3">Gene Expression (Scatter)</h3>
         <GeneSearch
           genes={genes}
           selectedGene={settings.selectedGene}
           onGeneSelect={(gene) => onSettingsChange({ selectedGene: gene })}
+        />
+      </div>
+
+      <div>
+        <h3 className="text-sm font-semibold text-foreground mb-3">Multi-Gene Selection (Dot Plot)</h3>
+        <MultiGeneSearch
+          genes={genes}
+          selectedGenes={settings.selectedGenes}
+          onGenesSelect={(selectedGenes) => onSettingsChange({ selectedGenes })}
+          maxGenes={20}
         />
       </div>
 
