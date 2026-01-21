@@ -1,5 +1,5 @@
 import React, { useState, useCallback } from "react";
-import { Upload, FileJson, AlertCircle, Check, Download } from "lucide-react";
+import { Upload, FileJson, AlertCircle, Check } from "lucide-react";
 import { SingleCellDataset } from "@/types/singleCell";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -307,32 +307,19 @@ export function DatasetUploader({ onDatasetLoad, buttonVariant = "outline" }: Da
           )}
           
           {/* Actions */}
-          <div className="flex justify-between">
-            <Button
-              variant="ghost"
-              size="sm"
-              asChild
-            >
-              <a href="/export_template.R" download className="gap-2">
-                <Download className="h-4 w-4" />
-                R Export Script
-              </a>
-            </Button>
-            
-            <div className="flex gap-2">
-              {validation && (
-                <Button variant="outline" size="sm" onClick={handleReset}>
-                  Reset
-                </Button>
-              )}
-              <Button 
-                size="sm" 
-                onClick={handleConfirm}
-                disabled={!validation?.valid}
-              >
-                Load Dataset
+          <div className="flex justify-end gap-2">
+            {validation && (
+              <Button variant="outline" size="sm" onClick={handleReset}>
+                Reset
               </Button>
-            </div>
+            )}
+            <Button 
+              size="sm" 
+              onClick={handleConfirm}
+              disabled={!validation?.valid}
+            >
+              Load Dataset
+            </Button>
           </div>
         </div>
       </DialogContent>

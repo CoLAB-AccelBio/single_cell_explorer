@@ -14,7 +14,8 @@ import { VisualizationSettings, SingleCellDataset, CellFilterState as CellFilter
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { PanelLeft, PanelLeftClose } from "lucide-react";
+import { PanelLeft, PanelLeftClose, Download } from "lucide-react";
+import { Button } from "@/components/ui/button";
 
 // Generate two demo datasets for side-by-side comparison
 const defaultDataset1 = generateDemoDataset(15000);
@@ -167,6 +168,13 @@ const Index = () => {
               />
             )}
           </div>
+          
+          <Button variant="ghost" size="sm" asChild>
+            <a href="/export_template.R" download className="gap-2">
+              <Download className="h-4 w-4" />
+              R Export Script
+            </a>
+          </Button>
         </div>
 
         {showSideBySide ? (
