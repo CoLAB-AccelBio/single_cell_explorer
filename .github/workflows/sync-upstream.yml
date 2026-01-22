@@ -22,7 +22,7 @@ jobs:
 
       - name: Add upstream and sync
         run: |
-          git remote add upstream https://github.com/JMarzec/multi-ML-classifier.git || true
+          git remote add upstream https://github.com/JMarzec/single_cell_explorer.git || true
           git fetch upstream
           git checkout main
           git merge upstream/main
