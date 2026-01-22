@@ -1,0 +1,29 @@
+name: Sync upstream
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '0 3 * * *'
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Configure git identity
+        run: |
+          git config --global user.name "github-actions[bot]"
+          git config --global user.email "github-actions[bot]@users.noreply.github.com"
+
+      - name: Add upstream and sync
+        run: |
+          git remote add upstream https://github.com/JMarzec/multi-ML-classifier.git || true
+          git fetch upstream
+          git checkout main
+          git merge upstream/main
+          git push origin main
