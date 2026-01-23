@@ -66,4 +66,5 @@ export interface VisualizationSettings {
   selectedGenes: string[];
   opacity: number;
   cellFilter: CellFilterState;
+  expressionScale: number; // 0.1 to 3.0, adjusts color intensity mapping
 }

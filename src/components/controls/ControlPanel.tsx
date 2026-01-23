@@ -75,6 +75,30 @@ export function ControlPanel({
           </div>
         </div>
 
+        <div className="space-y-2">
+          <Label className="text-xs text-muted-foreground">
+            Expression Scale {settings.selectedGene ? `(${settings.selectedGene})` : ''}
+          </Label>
+          <Slider
+            value={[settings.expressionScale]}
+            min={0.1}
+            max={3}
+            step={0.1}
+            onValueChange={([value]) => onSettingsChange({ expressionScale: value })}
+            disabled={!settings.selectedGene}
+          />
+          <div className="flex justify-between text-xs text-muted-foreground">
+            <span>Low</span>
+            <span className="font-mono">{settings.expressionScale.toFixed(1)}x</span>
+            <span>High</span>
+          </div>
+          <p className="text-xs text-muted-foreground italic">
+            {settings.selectedGene 
+              ? "Increase to enhance high expression visibility" 
+              : "Select a gene to adjust expression scaling"}
+          </p>
+        </div>
+
         <div className="flex items-center justify-between">
           <Label htmlFor="show-clusters" className="text-sm">
             Show Clusters

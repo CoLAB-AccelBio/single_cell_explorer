@@ -47,6 +47,7 @@ const Index = () => {
     selectedGenes: [],
     opacity: 0.8,
     cellFilter: defaultCellFilter,
+    expressionScale: 1.0,
   });
 
   const handleSettingsChange = useCallback(
@@ -233,6 +234,7 @@ const Index = () => {
                 showClusters={!settings.selectedGene}
                 showLabels={settings.showLabels}
                 opacity={settings.opacity}
+                expressionScale={settings.expressionScale}
                 clusterNames={clusterNames}
                 cellFilter={settings.cellFilter}
                 onCellsSelected={handleCellsSelected}

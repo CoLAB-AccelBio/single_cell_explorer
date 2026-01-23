@@ -19,6 +19,7 @@ interface ScatterPlotProps {
   showClusters: boolean;
   showLabels: boolean;
   opacity: number;
+  expressionScale?: number;
   clusterNames: string[];
   cellFilter?: CellFilterState;
   annotationData?: AnnotationData;
@@ -68,8 +69,13 @@ function parseColorToRGBA(color: string, alpha: number = 1): [number, number, nu
 }
 
 // Color scale for expression (blue to red through white)
-function expressionToColor(value: number, min: number, max: number): [number, number, number, number] {
-  const normalized = max === min ? 0.5 : (value - min) / (max - min);
+// scale parameter adjusts the curve: >1 enhances high expression, <1 flattens it
+function expressionToColor(value: number, min: number, max: number, scale: number = 1): [number, number, number, number] {
+  let normalized = max === min ? 0.5 : (value - min) / (max - min);
+  
+  // Apply power scaling: scale > 1 pushes colors toward high expression (more red)
+  // scale < 1 pushes toward low expression (more gray)
+  normalized = Math.pow(normalized, 1 / scale);
   
   if (normalized < 0.5) {
     // Low expression: gray to white
@@ -119,6 +125,7 @@ export function ScatterPlot({
   showClusters,
   showLabels,
   opacity,
+  expressionScale = 1,
   clusterNames,
   cellFilter,
   annotationData,
@@ -312,7 +319,7 @@ export function ScatterPlot({
       
       if (selectedGene && expressionData) {
         const expr = expressionData.get(cell.id) ?? 0;
-        const baseColor = expressionToColor(expr, expressionBounds.min, expressionBounds.max);
+        const baseColor = expressionToColor(expr, expressionBounds.min, expressionBounds.max, expressionScale);
         color = [baseColor[0], baseColor[1], baseColor[2], Math.floor(opacity * 255)];
       } else if (annotationData) {
         // Use annotation-based coloring
@@ -412,7 +419,7 @@ export function ScatterPlot({
     ctx.fillText("tSNE2", 0, 0);
     ctx.restore();
     
-  }, [filteredCells, expressionData, selectedGene, pointSize, showClusters, showLabels, opacity, dimensions, bounds, expressionBounds, clusterCenters, transform, dataToCanvas, selectedCells, isSelecting, selectionMode, lassoPoints, rectSelection]);
+  }, [filteredCells, expressionData, selectedGene, pointSize, showClusters, showLabels, opacity, expressionScale, dimensions, bounds, expressionBounds, clusterCenters, transform, dataToCanvas, selectedCells, isSelecting, selectionMode, lassoPoints, rectSelection]);
 
   // Handle resize
   useEffect(() => {
