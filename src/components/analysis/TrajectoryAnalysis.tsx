@@ -219,8 +219,9 @@ export const TrajectoryAnalysis: React.FC<TrajectoryAnalysisProps> = ({
     canvas.height = height * dpr;
     ctx.scale(dpr, dpr);
     
-    // Clear
-    ctx.fillStyle = 'hsl(var(--card))';
+    // Clear with white/transparent background
+    ctx.clearRect(0, 0, width, height);
+    ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, width, height);
 
     const padding = 40;
