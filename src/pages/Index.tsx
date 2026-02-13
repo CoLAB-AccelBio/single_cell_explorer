@@ -1,17 +1,22 @@
-import React, { useState, useMemo, useCallback } from "react";
+import React, { useState, useMemo, useCallback, useRef } from "react";
 import { Header } from "@/components/layout/Header";
 import { ScatterPlot } from "@/components/scatter/ScatterPlot";
 import { ControlPanel } from "@/components/controls/ControlPanel";
 import { CellFilter } from "@/components/controls/CellFilter";
+import { ClusterAnnotationTool } from "@/components/controls/ClusterAnnotationTool";
 import { DifferentialExpressionTable } from "@/components/table/DifferentialExpressionTable";
 import { ViolinPlot } from "@/components/plots/ViolinPlot";
 import { FeaturePlot } from "@/components/plots/FeaturePlot";
 import { DotPlot } from "@/components/plots/DotPlot";
 import { PathwayEnrichment } from "@/components/analysis/PathwayEnrichment";
+import { TrajectoryAnalysis } from "@/components/analysis/TrajectoryAnalysis";
+import { PseudotimeHeatmap } from "@/components/analysis/PseudotimeHeatmap";
+import { calculatePseudotime } from "@/components/analysis/TrajectoryAnalysis";
 import { DatasetUploader } from "@/components/upload/DatasetUploader";
 import { generateDemoDataset } from "@/data/demoData";
-import { getExpressionData, getMultiGeneExpression, getAnnotationValues, getAnnotationColorMap } from "@/lib/expressionUtils";
-import { VisualizationSettings, SingleCellDataset, CellFilterState as CellFilterType, Cell } from "@/types/singleCell";
+import { getExpressionData, getMultiGeneExpression, getAveragedExpression, getAnnotationValues, getAnnotationColorMap, calculatePercentile } from "@/lib/expressionUtils";
+import { getPaletteGradientCSS } from "@/lib/colorPalettes";
+import { VisualizationSettings, SingleCellDataset, CellFilterState as CellFilterType, Cell, ClusterInfo, ColorPalette } from "@/types/singleCell";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -22,6 +27,32 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 // Generate demo dataset
 const defaultDataset = generateDemoDataset(15000);
 
+// Wrapper that computes pseudotime for the heatmap using the first cluster as root
+const PseudotimeHeatmapWrapper: React.FC<{
+  cells: Cell[];
+  clusters: ClusterInfo[];
+  genes: string[];
+  dataset: SingleCellDataset;
+  colorPalette: ColorPalette;
+}> = ({ cells, clusters, genes, dataset, colorPalette }) => {
+  const pseudotimeMap = useMemo(() => calculatePseudotime(cells, 0), [cells]);
+  const expressionDataMap = useMemo(
+    () => getMultiGeneExpression(dataset, genes),
+    [dataset, genes]
+  );
+
+  return (
+    <PseudotimeHeatmap
+      cells={cells}
+      clusters={clusters}
+      genes={genes}
+      expressionDataMap={expressionDataMap}
+      pseudotimeMap={pseudotimeMap}
+      colorPalette={colorPalette}
+    />
+  );
+};
+
 const defaultCellFilter: CellFilterType = {
   selectedSamples: [],
   selectedClusters: [],
@@ -29,6 +60,7 @@ const defaultCellFilter: CellFilterType = {
 
 const Index = () => {
   const [dataset, setDataset] = useState<SingleCellDataset>(defaultDataset);
+  const originalDatasetRef = useRef<SingleCellDataset>(defaultDataset);
   
   // Selected cells from lasso/rectangle selection
   const [selectedCells, setSelectedCells] = useState<Cell[]>([]);
@@ -41,11 +73,16 @@ const Index = () => {
     pointSize: 2,
     showClusters: true,
     showLabels: true,
-    colorPalette: "viridis",
+    colorPalette: "grrd",
     selectedGene: null,
     selectedGenes: [],
     opacity: 0.8,
     cellFilter: defaultCellFilter,
+    expressionScale: 1.0,
+    usePercentileClipping: true,
+    percentileLow: 5,
+    percentileHigh: 95,
+    showAveragedExpression: true,
   });
 
   const handleSettingsChange = useCallback(
@@ -55,11 +92,27 @@ const Index = () => {
     []
   );
 
-  // Get expression data for selected gene
+  // Get expression data for selected gene or averaged expression for multiple genes
   const expressionData = useMemo(() => {
-    if (!settings.selectedGene) return undefined;
-    return getExpressionData(dataset, settings.selectedGene);
-  }, [settings.selectedGene, dataset]);
+    // If single gene selected, use it
+    if (settings.selectedGene) {
+      return getExpressionData(dataset, settings.selectedGene);
+    }
+    // If multiple genes selected and averaging is enabled, compute average
+    if (settings.showAveragedExpression && settings.selectedGenes && settings.selectedGenes.length > 0) {
+      return getAveragedExpression(dataset, settings.selectedGenes);
+    }
+    return undefined;
+  }, [settings.selectedGene, settings.selectedGenes, settings.showAveragedExpression, dataset]);
+
+  // Effective gene label for display
+  const effectiveGeneLabel = useMemo(() => {
+    if (settings.selectedGene) return settings.selectedGene;
+    if (settings.showAveragedExpression && settings.selectedGenes && settings.selectedGenes.length > 0) {
+      return `Avg(${settings.selectedGenes.slice(0, 3).join(', ')}${settings.selectedGenes.length > 3 ? '...' : ''})`;
+    }
+    return null;
+  }, [settings.selectedGene, settings.selectedGenes, settings.showAveragedExpression]);
 
   // Get expression data for all selected genes (for dot plot)
   const multiGeneExpressionData = useMemo(() => {
@@ -70,6 +123,7 @@ const Index = () => {
 
   const handleDatasetLoad = useCallback((newDataset: SingleCellDataset) => {
     setDataset(newDataset);
+    originalDatasetRef.current = newDataset;
     setSettings(prev => ({ ...prev, selectedGene: null, selectedGenes: [], cellFilter: defaultCellFilter }));
     // Set default annotation if cell_type exists
     const annotations = newDataset.annotationOptions || [];
@@ -78,6 +132,64 @@ const Index = () => {
     } else if (annotations.length > 0) {
       setSelectedAnnotation(annotations[0]);
     }
+  }, []);
+
+  // Cluster annotation handlers
+  const handleRenameCluster = useCallback((clusterId: number, newName: string) => {
+    setDataset(prev => ({
+      ...prev,
+      clusters: prev.clusters.map(c =>
+        c.id === clusterId ? { ...c, name: newName } : c
+      ),
+      cells: prev.cells.map(cell =>
+        cell.cluster === clusterId
+          ? { ...cell, metadata: { ...cell.metadata, cell_type: newName } }
+          : cell
+      ),
+    }));
+  }, []);
+
+  const handleMergeClusters = useCallback((sourceIds: number[], targetId: number, mergedName: string) => {
+    setDataset(prev => {
+      // Reassign cells from source clusters to target
+      const newCells = prev.cells.map(cell =>
+        sourceIds.includes(cell.cluster)
+          ? { ...cell, cluster: targetId, metadata: { ...cell.metadata, cell_type: mergedName } }
+          : cell
+      );
+
+      // Update target cluster name and remove source clusters
+      const targetCluster = prev.clusters.find(c => c.id === targetId);
+      const mergedCellCount = newCells.filter(c => c.cluster === targetId).length;
+      
+      const newClusters = prev.clusters
+        .filter(c => !sourceIds.includes(c.id))
+        .map(c =>
+          c.id === targetId
+            ? { ...c, name: mergedName, cellCount: mergedCellCount }
+            : c
+        );
+
+      return {
+        ...prev,
+        cells: newCells,
+        clusters: newClusters,
+        metadata: { ...prev.metadata, clusterCount: newClusters.length },
+      };
+    });
+  }, []);
+
+  const handleChangeClusterColor = useCallback((clusterId: number, newColor: string) => {
+    setDataset(prev => ({
+      ...prev,
+      clusters: prev.clusters.map(c =>
+        c.id === clusterId ? { ...c, color: newColor } : c
+      ),
+    }));
+  }, []);
+
+  const handleResetClusters = useCallback(() => {
+    setDataset(originalDatasetRef.current);
   }, []);
 
   const handleGeneClick = useCallback((gene: string) => {
@@ -102,10 +214,12 @@ const Index = () => {
   // Get annotation values and colors for current selection
   const annotationData = useMemo(() => {
     if (selectedAnnotation === "cluster") {
+      // Show cluster numbers (0, 1, 2, ...) not cell type names
+      const clusterIds = dataset.clusters.map(c => `Cluster ${c.id}`);
       return {
-        values: dataset.clusters.map(c => c.name),
-        colorMap: Object.fromEntries(dataset.clusters.map(c => [c.name, c.color])),
-        getCellValue: (cell: Cell) => dataset.clusters[cell.cluster]?.name || `Cluster ${cell.cluster}`,
+        values: clusterIds,
+        colorMap: Object.fromEntries(dataset.clusters.map(c => [`Cluster ${c.id}`, c.color])),
+        getCellValue: (cell: Cell) => `Cluster ${cell.cluster}`,
       };
     }
     
@@ -215,8 +329,8 @@ const Index = () => {
             <div className="p-3 bg-card border border-border rounded-lg">
               <h3 className="font-semibold text-foreground">
                 Gene Expression
-                {settings.selectedGene && (
-                  <span className="ml-2 text-primary font-mono text-sm">({settings.selectedGene})</span>
+                {effectiveGeneLabel && (
+                  <span className="ml-2 text-primary font-mono text-sm">({effectiveGeneLabel})</span>
                 )}
               </h3>
             </div>
@@ -225,31 +339,39 @@ const Index = () => {
               <ScatterPlot
                 cells={dataset.cells}
                 expressionData={expressionData}
-                selectedGene={settings.selectedGene}
+                selectedGene={effectiveGeneLabel}
                 pointSize={settings.pointSize}
-                showClusters={!settings.selectedGene}
+                showClusters={!effectiveGeneLabel}
                 showLabels={settings.showLabels}
                 opacity={settings.opacity}
+                expressionScale={settings.expressionScale}
+                usePercentileClipping={settings.usePercentileClipping}
+                percentileLow={settings.percentileLow}
+                percentileHigh={settings.percentileHigh}
+                colorPalette={settings.colorPalette}
                 clusterNames={clusterNames}
                 cellFilter={settings.cellFilter}
                 onCellsSelected={handleCellsSelected}
               />
             </div>
             
-            {/* Expression Color Legend */}
-            {settings.selectedGene && (
+            {/* Expression Level Legend */}
+            {effectiveGeneLabel && (
               <div className="bg-card border border-border rounded-lg p-3">
                 <h4 className="text-sm font-medium text-foreground mb-2">Expression Level</h4>
                 <div className="flex items-center gap-2">
                   <span className="text-xs text-muted-foreground">Low</span>
-                  <div 
+                  <div
                     className="flex-1 h-3 rounded"
-                    style={{
-                      background: 'linear-gradient(to right, rgb(180, 180, 180), rgb(255, 255, 255) 50%, rgb(255, 75, 55))'
-                    }}
+                    style={{ background: getPaletteGradientCSS(settings.colorPalette) }}
                   />
                   <span className="text-xs text-muted-foreground">High</span>
                 </div>
+                {settings.usePercentileClipping && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Clipped to {settings.percentileLow}–{settings.percentileHigh} percentile
+                  </p>
+                )}
               </div>
             )}
           </div>
@@ -270,16 +392,23 @@ const Index = () => {
               filter={settings.cellFilter}
               onFilterChange={(filter) => handleSettingsChange({ cellFilter: filter })}
             />
+            <ClusterAnnotationTool
+              clusters={dataset.clusters}
+              onRenameCluster={handleRenameCluster}
+              onMergeClusters={handleMergeClusters}
+              onChangeClusterColor={handleChangeClusterColor}
+              onResetClusters={handleResetClusters}
+            />
           </div>
 
           {/* Analysis Tabs */}
           <div className="lg:col-span-3 space-y-6">
             <Tabs defaultValue="violin" className="w-full">
               <TabsList>
-                <TabsTrigger value="violin" disabled={!settings.selectedGene}>
+                <TabsTrigger value="violin" disabled={!effectiveGeneLabel}>
                   Violin Plot
                 </TabsTrigger>
-                <TabsTrigger value="feature" disabled={!settings.selectedGene}>
+                <TabsTrigger value="feature" disabled={!effectiveGeneLabel}>
                   Feature Plot
                 </TabsTrigger>
                 <TabsTrigger value="dotplot">
@@ -288,12 +417,15 @@ const Index = () => {
                 <TabsTrigger value="enrichment">
                   Pathway Enrichment
                 </TabsTrigger>
+                <TabsTrigger value="trajectory">
+                  Trajectory
+                </TabsTrigger>
               </TabsList>
               <TabsContent value="violin">
-                {settings.selectedGene && expressionData ? (
+                {effectiveGeneLabel && expressionData ? (
                   <ViolinPlot 
                     cells={dataset.cells} 
-                    gene={settings.selectedGene} 
+                    gene={effectiveGeneLabel} 
                     clusters={dataset.clusters}
                     expressionData={expressionData}
                   />
@@ -304,10 +436,10 @@ const Index = () => {
                 )}
               </TabsContent>
               <TabsContent value="feature">
-                {settings.selectedGene && expressionData ? (
+                {effectiveGeneLabel && expressionData ? (
                   <FeaturePlot 
                     cells={dataset.cells} 
-                    gene={settings.selectedGene} 
+                    gene={effectiveGeneLabel} 
                     clusters={dataset.clusters}
                     expressionData={expressionData}
                   />
@@ -330,6 +462,21 @@ const Index = () => {
                   genes={selectedCellGenes}
                   onGeneClick={handleGeneClick}
                 />
+              </TabsContent>
+              <TabsContent value="trajectory">
+                <div className="space-y-6">
+                  <TrajectoryAnalysis
+                    cells={dataset.cells}
+                    clusters={dataset.clusters}
+                  />
+                  <PseudotimeHeatmapWrapper
+                    cells={dataset.cells}
+                    clusters={dataset.clusters}
+                    genes={settings.selectedGenes || []}
+                    dataset={dataset}
+                    colorPalette={settings.colorPalette}
+                  />
+                </div>
               </TabsContent>
             </Tabs>
 
@@ -369,8 +516,15 @@ const Index = () => {
 
       <footer className="border-t border-border bg-card py-4">
         <div className="container mx-auto px-4 text-center text-sm text-muted-foreground">
-          Single-Cell RNA-seq Data Portal • Powered by{" "}
-          <span className="font-semibold text-primary">AccelBio</span>
+          Single-cell explorer • Powered by{" "}
+          <a 
+            href="https://accelbio.pt/" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="font-semibold text-primary hover:underline"
+          >
+            AccelBio
+          </a>
         </div>
       </footer>
     </div>

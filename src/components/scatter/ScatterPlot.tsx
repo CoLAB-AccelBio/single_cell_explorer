@@ -1,6 +1,7 @@
 import React, { useRef, useEffect, useState, useMemo, useCallback } from "react";
-import { Cell, CellFilterState } from "@/types/singleCell";
+import { Cell, CellFilterState, ColorPalette } from "@/types/singleCell";
 import { getClusterColorRGBA } from "@/data/demoData";
+import { expressionToColor } from "@/lib/colorPalettes";
 import { CellTooltip } from "./CellTooltip";
 import { ExportControls } from "./ExportControls";
 import { SelectionTools, SelectionMode } from "./SelectionTools";
@@ -19,6 +20,11 @@ interface ScatterPlotProps {
   showClusters: boolean;
   showLabels: boolean;
   opacity: number;
+  expressionScale?: number;
+  usePercentileClipping?: boolean;
+  percentileLow?: number;
+  percentileHigh?: number;
+  colorPalette?: ColorPalette;
   clusterNames: string[];
   cellFilter?: CellFilterState;
   annotationData?: AnnotationData;
@@ -67,24 +73,7 @@ function parseColorToRGBA(color: string, alpha: number = 1): [number, number, nu
   return [100, 140, 200, Math.floor(alpha * 255)];
 }
 
-// Color scale for expression (blue to red through white)
-function expressionToColor(value: number, min: number, max: number): [number, number, number, number] {
-  const normalized = max === min ? 0.5 : (value - min) / (max - min);
-  
-  if (normalized < 0.5) {
-    // Low expression: gray to white
-    const t = normalized * 2;
-    const gray = Math.round(180 + t * 75);
-    return [gray, gray, gray, 255];
-  } else {
-    // High expression: white to red
-    const t = (normalized - 0.5) * 2;
-    const r = 255;
-    const g = Math.round(255 - t * 180);
-    const b = Math.round(255 - t * 200);
-    return [r, g, b, 255];
-  }
-}
+// expressionToColor is now imported from @/lib/colorPalettes
 
 // Check if point is inside polygon (ray casting)
 function pointInPolygon(x: number, y: number, polygon: { x: number; y: number }[]): boolean {
@@ -119,6 +108,11 @@ export function ScatterPlot({
   showClusters,
   showLabels,
   opacity,
+  expressionScale = 1,
+  usePercentileClipping = false,
+  percentileLow = 5,
+  percentileHigh = 95,
+  colorPalette = "grrd",
   clusterNames,
   cellFilter,
   annotationData,
@@ -183,18 +177,32 @@ export function ScatterPlot({
     };
   }, [cells]);
 
-  // Expression bounds
+  // Expression bounds - support percentile clipping
   const expressionBounds = useMemo(() => {
     if (!expressionData || expressionData.size === 0) return { min: 0, max: 1 };
     
+    const values = Array.from(expressionData.values());
+    
+    if (usePercentileClipping && values.length > 10) {
+      // Sort values and compute percentiles
+      const sorted = [...values].sort((a, b) => a - b);
+      const lowIdx = Math.floor((percentileLow / 100) * (sorted.length - 1));
+      const highIdx = Math.ceil((percentileHigh / 100) * (sorted.length - 1));
+      return { 
+        min: sorted[lowIdx], 
+        max: sorted[highIdx] 
+      };
+    }
+    
+    // Standard min/max
     let min = Infinity, max = -Infinity;
-    expressionData.forEach(value => {
+    values.forEach(value => {
       if (value < min) min = value;
       if (value > max) max = value;
     });
     
     return { min, max };
-  }, [expressionData]);
+  }, [expressionData, usePercentileClipping, percentileLow, percentileHigh]);
 
   // Cluster centers for labels (use filtered cells)
   const clusterCenters = useMemo(() => {
@@ -312,7 +320,7 @@ export function ScatterPlot({
       
       if (selectedGene && expressionData) {
         const expr = expressionData.get(cell.id) ?? 0;
-        const baseColor = expressionToColor(expr, expressionBounds.min, expressionBounds.max);
+        const baseColor = expressionToColor(expr, expressionBounds.min, expressionBounds.max, expressionScale, colorPalette);
         color = [baseColor[0], baseColor[1], baseColor[2], Math.floor(opacity * 255)];
       } else if (annotationData) {
         // Use annotation-based coloring
@@ -412,7 +420,7 @@ export function ScatterPlot({
     ctx.fillText("tSNE2", 0, 0);
     ctx.restore();
     
-  }, [filteredCells, expressionData, selectedGene, pointSize, showClusters, showLabels, opacity, dimensions, bounds, expressionBounds, clusterCenters, transform, dataToCanvas, selectedCells, isSelecting, selectionMode, lassoPoints, rectSelection]);
+  }, [filteredCells, expressionData, selectedGene, pointSize, showClusters, showLabels, opacity, expressionScale, colorPalette, dimensions, bounds, expressionBounds, clusterCenters, transform, dataToCanvas, selectedCells, isSelecting, selectionMode, lassoPoints, rectSelection]);
 
   // Handle resize
   useEffect(() => {
@@ -594,16 +602,6 @@ export function ScatterPlot({
       
       {/* Export button */}
       <div className="absolute top-4 right-4 flex items-center gap-2">
-        {selectedGene && (
-          <div className="bg-card/95 border border-border rounded-lg p-3 shadow-sm mr-2">
-            <div className="text-xs font-medium text-foreground mb-2">{selectedGene}</div>
-            <div className="flex items-center gap-2">
-              <span className="text-xs text-muted-foreground">Low</span>
-              <div className="w-24 h-3 rounded gradient-expression" />
-              <span className="text-xs text-muted-foreground">High</span>
-            </div>
-          </div>
-        )}
         <ExportControls canvasRef={canvasRef} filename={`scatter-${selectedGene || 'clusters'}`} />
       </div>
       

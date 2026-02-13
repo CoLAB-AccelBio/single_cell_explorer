@@ -66,4 +66,9 @@ export interface VisualizationSettings {
   selectedGenes: string[];
   opacity: number;
   cellFilter: CellFilterState;
+  expressionScale: number; // 0.1 to 3.0, adjusts color intensity mapping
+  usePercentileClipping: boolean; // Use percentile bounds instead of min/max
+  percentileLow: number; // Lower percentile (default 5)
+  percentileHigh: number; // Upper percentile (default 95)
+  showAveragedExpression: boolean; // Show averaged expression when multiple genes selected
 }
