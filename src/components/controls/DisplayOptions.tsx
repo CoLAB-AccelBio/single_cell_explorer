@@ -158,27 +158,6 @@ export function DisplayOptions({
           />
         </div>
       </div>
-
-      <div>
-        <h3 className="text-sm font-semibold text-foreground mb-3">Cluster Legend</h3>
-        <div className="space-y-1 max-h-48 overflow-y-auto scrollbar-thin">
-          {clusters.map((cluster) => (
-            <div
-              key={cluster.id}
-              className="flex items-center gap-2 py-1.5 px-2 rounded hover:bg-secondary transition-colors cursor-pointer"
-            >
-              <div
-                className="w-3 h-3 rounded-full flex-shrink-0"
-                style={{ backgroundColor: cluster.color }}
-              />
-              <span className="text-sm text-foreground truncate">{cluster.name}</span>
-              <span className="text-xs text-muted-foreground ml-auto font-mono">
-                {cluster.cellCount.toLocaleString()}
-              </span>
-            </div>
-          ))}
-        </div>
-      </div>
     </div>
   );
 }
