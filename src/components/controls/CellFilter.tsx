@@ -202,6 +202,45 @@ export function CellFilter({
             })}
           </div>
         )}
+      
+        {/* Gene Selection inside cluster filter */}
+        {genes && settings && onSettingsChange && (
+          <>
+            <div className="pt-2 border-t border-border/50">
+              <h3 className="text-sm font-semibold text-foreground mb-3">Gene Expression (Scatter)</h3>
+              <GeneSearch
+                genes={genes}
+                selectedGene={settings.selectedGene}
+                onGeneSelect={(gene) => onSettingsChange({ selectedGene: gene })}
+              />
+            </div>
+
+            <div>
+              <h3 className="text-sm font-semibold text-foreground mb-3">Multi-Gene Selection</h3>
+              <MultiGeneSearch
+                genes={genes}
+                selectedGenes={settings.selectedGenes}
+                onGenesSelect={(selectedGenes) => onSettingsChange({ selectedGenes })}
+                maxGenes={20}
+              />
+              {settings.selectedGenes.length > 0 && (
+                <div className="flex items-center justify-between mt-3">
+                  <div>
+                    <Label htmlFor="show-averaged" className="text-sm">
+                      Show Averaged Expression
+                    </Label>
+                    <p className="text-xs text-muted-foreground">Display on scatter plot</p>
+                  </div>
+                  <Switch
+                    id="show-averaged"
+                    checked={settings.showAveragedExpression}
+                    onCheckedChange={(checked) => onSettingsChange({ showAveragedExpression: checked })}
+                  />
+                </div>
+              )}
+            </div>
+          </>
+        )}
       </div>
 
       {/* Filter summary */}
@@ -218,45 +257,6 @@ export function CellFilter({
           cells
         </p>
       </div>
-
-      {/* Gene Selection */}
-      {genes && settings && onSettingsChange && (
-        <>
-          <div className="pt-2 border-t border-border">
-            <h3 className="text-sm font-semibold text-foreground mb-3">Gene Expression (Scatter)</h3>
-            <GeneSearch
-              genes={genes}
-              selectedGene={settings.selectedGene}
-              onGeneSelect={(gene) => onSettingsChange({ selectedGene: gene })}
-            />
-          </div>
-
-          <div>
-            <h3 className="text-sm font-semibold text-foreground mb-3">Multi-Gene Selection</h3>
-            <MultiGeneSearch
-              genes={genes}
-              selectedGenes={settings.selectedGenes}
-              onGenesSelect={(selectedGenes) => onSettingsChange({ selectedGenes })}
-              maxGenes={20}
-            />
-            {settings.selectedGenes.length > 0 && (
-              <div className="flex items-center justify-between mt-3">
-                <div>
-                  <Label htmlFor="show-averaged" className="text-sm">
-                    Show Averaged Expression
-                  </Label>
-                  <p className="text-xs text-muted-foreground">Display on scatter plot</p>
-                </div>
-                <Switch
-                  id="show-averaged"
-                  checked={settings.showAveragedExpression}
-                  onCheckedChange={(checked) => onSettingsChange({ showAveragedExpression: checked })}
-                />
-              </div>
-            )}
-          </div>
-        </>
-      )}
     </div>
   );
 }
