@@ -154,8 +154,8 @@ export function generateDemoDataset(cellCount: number = 15000): SingleCellDatase
   
   return {
     metadata: {
-      name: "Developmental Heart (Demo)",
-      description: "Single-cell RNA-seq data from developing human heart tissue. This is demo data for visualization purposes.",
+      name: "Heart organoids single-cell data",
+      description: "Single-cell RNA-seq data from heart organoids.",
       cellCount: cells.length,
       geneCount: ALL_GENES.length,
       clusterCount: clusters.length,

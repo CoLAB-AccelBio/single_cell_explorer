@@ -3,6 +3,7 @@ import { Header } from "@/components/layout/Header";
 import { ScatterPlot } from "@/components/scatter/ScatterPlot";
 import { CellFilter } from "@/components/controls/CellFilter";
 import { DisplayOptions } from "@/components/controls/DisplayOptions";
+import { GeneSelectionPanel } from "@/components/controls/GeneSelectionPanel";
 import { ClusterAnnotationTool } from "@/components/controls/ClusterAnnotationTool";
 import { DifferentialExpressionTable } from "@/components/table/DifferentialExpressionTable";
 import { ViolinPlot } from "@/components/plots/ViolinPlot";
@@ -377,27 +378,20 @@ const Index = () => {
           </div>
         </div>
 
-        {/* Filters & Display Options */}
+        {/* Filters, Gene Selection & Display Options */}
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <CellFilter
-            cells={dataset.cells}
-            clusters={dataset.clusters}
-            filter={settings.cellFilter}
-            onFilterChange={(filter) => handleSettingsChange({ cellFilter: filter })}
-            genes={dataset.genes}
-            settings={settings}
-            onSettingsChange={handleSettingsChange}
-          />
-          <DisplayOptions
-            clusters={dataset.clusters}
-            settings={settings}
-            onSettingsChange={handleSettingsChange}
-          />
-        </div>
-
-        {/* Control Panel */}
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          <div className="lg:col-span-1 space-y-4">
+          <div className="space-y-4">
+            <CellFilter
+              cells={dataset.cells}
+              clusters={dataset.clusters}
+              filter={settings.cellFilter}
+              onFilterChange={(filter) => handleSettingsChange({ cellFilter: filter })}
+            />
+            <GeneSelectionPanel
+              genes={dataset.genes}
+              settings={settings}
+              onSettingsChange={handleSettingsChange}
+            />
             <ClusterAnnotationTool
               clusters={dataset.clusters}
               onRenameCluster={handleRenameCluster}
@@ -406,9 +400,15 @@ const Index = () => {
               onResetClusters={handleResetClusters}
             />
           </div>
+          <DisplayOptions
+            clusters={dataset.clusters}
+            settings={settings}
+            onSettingsChange={handleSettingsChange}
+          />
+        </div>
 
-          {/* Analysis Tabs */}
-          <div className="lg:col-span-3 space-y-6">
+        {/* Analysis Tabs */}
+        <div className="space-y-6">
             <Tabs defaultValue="violin" className="w-full">
               <TabsList>
                 <TabsTrigger value="violin" disabled={!effectiveGeneLabel}>
@@ -492,7 +492,6 @@ const Index = () => {
               onGeneClick={handleGeneClick}
             />
           </div>
-        </div>
 
         {/* Dataset Info */}
         <div className="mt-6 p-4 bg-muted/50 rounded-lg border border-border">
