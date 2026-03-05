@@ -1,6 +1,7 @@
 import React, { useState, useCallback } from "react";
 import { Upload, FileJson, AlertCircle, Check } from "lucide-react";
 import { SingleCellDataset } from "@/types/singleCell";
+import { normalizeDataset } from "@/lib/datasetLoader";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import {
@@ -73,72 +74,7 @@ function validateDataset(data: unknown): ValidationResult {
   };
 }
 
-function normalizeDataset(data: unknown): SingleCellDataset {
-  const obj = data as Record<string, unknown>;
-  
-  // Normalize cells
-  const rawCells = (obj.cells as Record<string, unknown>[]) || [];
-  const cells = rawCells.map((cell, idx) => ({
-    id: String(cell.id || `cell_${idx}`),
-    x: Number(cell.x),
-    y: Number(cell.y),
-    cluster: Number(cell.cluster),
-    metadata: (cell.metadata as Record<string, string | number>) || {},
-  }));
-  
-  // Normalize clusters
-  const rawClusters = (obj.clusters as Record<string, unknown>[]) || [];
-  const clusters = rawClusters.map((cluster, idx) => ({
-    id: Number(cluster.id ?? idx),
-    name: String(cluster.name || `Cluster ${idx}`),
-    cellCount: Number(cluster.cellCount || cells.filter(c => c.cluster === idx).length),
-    color: String(cluster.color || `hsl(${(idx * 36) % 360}, 70%, 50%)`),
-  }));
-  
-  // Normalize metadata
-  const rawMeta = (obj.metadata as Record<string, unknown>) || {};
-  const metadata = {
-    name: String(rawMeta.name || "Uploaded Dataset"),
-    description: String(rawMeta.description || "User-uploaded single-cell dataset"),
-    cellCount: cells.length,
-    geneCount: ((obj.genes as string[]) || []).length,
-    clusterCount: clusters.length,
-    organism: rawMeta.organism ? String(rawMeta.organism) : undefined,
-    tissue: rawMeta.tissue ? String(rawMeta.tissue) : undefined,
-    source: rawMeta.source ? String(rawMeta.source) : undefined,
-  };
-  
-  // Normalize differential expression
-  const rawDE = (obj.differentialExpression as Record<string, unknown>[]) || [];
-  const differentialExpression = rawDE.map(de => ({
-    gene: String(de.gene),
-    cluster: String(de.cluster),
-    logFC: Number(de.logFC),
-    pValue: Number(de.pValue),
-    pAdj: Number(de.pAdj),
-  }));
-  
-  // Normalize expression data
-  const rawExpression = obj.expression as Record<string, Record<string, number>> | undefined;
-  const expression = rawExpression || undefined;
-  
-  // Extract annotation options from first cell's metadata
-  const annotationOptions = cells.length > 0 
-    ? Object.keys(cells[0].metadata).filter(key => 
-        typeof cells[0].metadata[key] === 'string'
-      )
-    : [];
-  
-  return {
-    metadata,
-    cells,
-    genes: (obj.genes as string[]) || [],
-    clusters,
-    differentialExpression,
-    expression,
-    annotationOptions,
-  };
-}
+
 
 export function DatasetUploader({ onDatasetLoad, buttonVariant = "outline" }: DatasetUploaderProps) {
   const [isDragging, setIsDragging] = useState(false);
