@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useRef } from "react";
+import React, { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { Header } from "@/components/layout/Header";
 import { ScatterPlot } from "@/components/scatter/ScatterPlot";
 import { CellFilter } from "@/components/controls/CellFilter";
@@ -15,6 +15,7 @@ import { PseudotimeHeatmap } from "@/components/analysis/PseudotimeHeatmap";
 import { calculatePseudotime } from "@/components/analysis/TrajectoryAnalysis";
 import { DatasetUploader } from "@/components/upload/DatasetUploader";
 import { generateDemoDataset } from "@/data/demoData";
+import { fetchRemoteDataset } from "@/lib/datasetLoader";
 import { getExpressionData, getMultiGeneExpression, getAveragedExpression, getAnnotationValues, getAnnotationColorMap, calculatePercentile } from "@/lib/expressionUtils";
 import { getPaletteGradientCSS } from "@/lib/colorPalettes";
 import { VisualizationSettings, SingleCellDataset, CellFilterState as CellFilterType, Cell, ClusterInfo, ColorPalette } from "@/types/singleCell";
@@ -25,7 +26,7 @@ import { Download } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
-// Generate demo dataset
+// Generate demo dataset as fallback
 const defaultDataset = generateDemoDataset(15000);
 
 // Wrapper that computes pseudotime for the heatmap using the first cluster as root
@@ -61,8 +62,23 @@ const defaultCellFilter: CellFilterType = {
 
 const Index = () => {
   const [dataset, setDataset] = useState<SingleCellDataset>(defaultDataset);
+  const [isLoadingRemote, setIsLoadingRemote] = useState(true);
   const originalDatasetRef = useRef<SingleCellDataset>(defaultDataset);
-  
+
+  // Fetch remote dataset on mount
+  useEffect(() => {
+    fetchRemoteDataset()
+      .then((remoteDataset) => {
+        console.log("Remote dataset loaded:", remoteDataset.metadata.name, remoteDataset.cells.length, "cells");
+        setDataset(remoteDataset);
+        originalDatasetRef.current = remoteDataset;
+      })
+      .catch((err) => {
+        console.warn("Failed to load remote dataset, using demo data:", err);
+      })
+      .finally(() => setIsLoadingRemote(false));
+  }, []);
+
   // Selected cells from lasso/rectangle selection
   const [selectedCells, setSelectedCells] = useState<Cell[]>([]);
   
@@ -244,6 +260,15 @@ const Index = () => {
     setSelectedCells(cells);
   }, []);
 
+  if (isLoadingRemote) {
+    return (
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4">
+        <div className="animate-spin rounded-full h-12 w-12 border-4 border-muted border-t-primary" />
+        <p className="text-muted-foreground text-sm">Loading heart organoid dataset…</p>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
       <Header metadata={dataset.metadata} />
@@ -300,29 +325,40 @@ const Index = () => {
             </div>
             
             {/* Annotation Legend */}
-            <div className="bg-card border border-border rounded-lg p-3">
-              <h4 className="text-sm font-medium text-foreground mb-2">
-                {selectedAnnotation.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
-              </h4>
-              <div className="max-h-32 overflow-y-auto">
-                <div className="grid grid-cols-2 gap-1">
-                  {annotationData.values.slice(0, 20).map((value, idx) => (
-                    <div key={idx} className="flex items-center gap-2 text-xs">
-                      <div 
-                        className="w-3 h-3 rounded-full flex-shrink-0" 
-                        style={{ backgroundColor: annotationData.colorMap[value] }}
-                      />
-                      <span className="text-muted-foreground truncate">{value}</span>
+            {(() => {
+              const cellCounts: Record<string, number> = {};
+              dataset.cells.forEach(cell => {
+                const val = annotationData.getCellValue(cell);
+                cellCounts[val] = (cellCounts[val] || 0) + 1;
+              });
+              return (
+                <div className="bg-card border border-border rounded-lg p-3">
+                  <h4 className="text-sm font-medium text-foreground mb-2">
+                    {selectedAnnotation.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                  </h4>
+                  <div className="max-h-32 overflow-y-auto">
+                    <div className="grid grid-cols-2 gap-1">
+                      {annotationData.values.slice(0, 20).map((value, idx) => (
+                        <div key={idx} className="flex items-center gap-2 text-xs">
+                          <div 
+                            className="w-3 h-3 rounded-full flex-shrink-0" 
+                            style={{ backgroundColor: annotationData.colorMap[value] }}
+                          />
+                          <span className="text-muted-foreground truncate">
+                            {value} ({cellCounts[value] || 0})
+                          </span>
+                        </div>
+                      ))}
+                      {annotationData.values.length > 20 && (
+                        <div className="text-xs text-muted-foreground col-span-2">
+                          +{annotationData.values.length - 20} more...
+                        </div>
+                      )}
                     </div>
-                  ))}
-                  {annotationData.values.length > 20 && (
-                    <div className="text-xs text-muted-foreground col-span-2">
-                      +{annotationData.values.length - 20} more...
-                    </div>
-                  )}
+                  </div>
                 </div>
-              </div>
-            </div>
+              );
+            })()}
           </div>
 
           {/* Right Plot - Gene Expression */}
@@ -408,7 +444,7 @@ const Index = () => {
         </div>
 
         {/* Analysis Tabs */}
-        <div className="space-y-6">
+        <div className="space-y-6 mt-6">
             <Tabs defaultValue="violin" className="w-full">
               <TabsList>
                 <TabsTrigger value="violin" disabled={!effectiveGeneLabel}>
@@ -420,12 +456,12 @@ const Index = () => {
                 <TabsTrigger value="dotplot">
                   Dot Plot
                 </TabsTrigger>
-                <TabsTrigger value="enrichment">
+                {/* <TabsTrigger value="enrichment">
                   Pathway Enrichment
                 </TabsTrigger>
                 <TabsTrigger value="trajectory">
                   Trajectory
-                </TabsTrigger>
+                </TabsTrigger> */}
               </TabsList>
               <TabsContent value="violin">
                 {effectiveGeneLabel && expressionData ? (
