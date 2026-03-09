@@ -529,30 +529,6 @@ const Index = () => {
             />
           </div>
 
-        {/* Dataset Info */}
-        <div className="mt-6 p-4 bg-muted/50 rounded-lg border border-border">
-          <p className="text-sm text-muted-foreground">
-            <strong className="text-foreground">About this dataset:</strong>{" "}
-            {dataset.metadata.description}
-          </p>
-          <div className="mt-2 flex flex-wrap gap-4 text-xs text-muted-foreground">
-            {dataset.metadata.organism && (
-              <span>
-                <strong>Organism:</strong> {dataset.metadata.organism}
-              </span>
-            )}
-            {dataset.metadata.tissue && (
-              <span>
-                <strong>Tissue:</strong> {dataset.metadata.tissue}
-              </span>
-            )}
-            {dataset.metadata.source && (
-              <span>
-                <strong>Source:</strong> {dataset.metadata.source}
-              </span>
-            )}
-          </div>
-        </div>
       </main>
 
       <footer className="border-t border-border bg-card py-4">
