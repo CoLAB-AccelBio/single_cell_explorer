@@ -416,7 +416,7 @@ const Index = () => {
           </div>
 
           {/* Right Plot - Gene Expression */}
-          <div className="space-y-4">
+          <div className="space-y-4" data-tour="expression-plot">
             <div className="p-3 bg-card border border-border rounded-lg">
               <h3 className="font-semibold text-foreground">
                 Gene Expression
