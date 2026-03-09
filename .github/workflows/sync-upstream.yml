@@ -32,6 +32,16 @@ jobs:
           git checkout main
           git merge upstream/main
 
+      - name: Install Git LFS
+        run: git lfs install --local
+
+      - name: Fetch missing LFS from upstream and upload to origin
+        run: |
+          # fetch only what's needed (faster than --all)
+          git lfs fetch upstream main --include="public/heart_organoid_S1_3_annot.json"
+          # upload LFS objects reachable from main to your fork
+          git lfs push origin main
+          
       - name: Allow incomplete LFS pushes (mirror upstream pointers)
         run: |
           git config lfs.allowincompletepush true
