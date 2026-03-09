@@ -346,7 +346,7 @@ const Index = () => {
         {/* Dual Plot Layout */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
           {/* Left Plot - Metadata Annotation */}
-          <div className="space-y-4">
+          <div className="space-y-4" data-tour="metadata-plot">
             <div className="flex items-center justify-between p-3 bg-card border border-border rounded-lg">
               <h3 className="font-semibold text-foreground">Metadata Annotation</h3>
               <Select value={selectedAnnotation} onValueChange={setSelectedAnnotation}>
