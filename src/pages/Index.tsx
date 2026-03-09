@@ -115,6 +115,7 @@ const defaultCellFilter: CellFilterType = {
 const Index = () => {
   const [dataset, setDataset] = useState<SingleCellDataset>(defaultDataset);
   const [isLoadingRemote, setIsLoadingRemote] = useState(true);
+  const [tourOpen, setTourOpen] = useState(false);
   const originalDatasetRef = useRef<SingleCellDataset>(defaultDataset);
 
   // Fetch remote dataset on mount
