@@ -24,7 +24,7 @@ export function Header({ metadata }: HeaderProps) {
 
               
               <p className="text-lg font-bold text-muted-foreground">
-                Single-Cell RNA-seq Explorer
+                Single-Cell Explorer
               </p>
             </div>
           </div>
