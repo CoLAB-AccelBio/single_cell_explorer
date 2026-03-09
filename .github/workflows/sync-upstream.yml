@@ -8,6 +8,11 @@ on:
 jobs:
   sync:
     runs-on: ubuntu-latest
+    env:
+      GIT_LFS_SKIP_SMUDGE: "1"   # <- key line
+
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout repo
