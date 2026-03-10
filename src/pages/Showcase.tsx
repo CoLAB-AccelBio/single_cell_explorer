@@ -264,7 +264,9 @@ export default function Showcase() {
       <section className="container mx-auto px-4 py-20 space-y-32">
         {features.map((feat, i) => (
           <div
+            id={feat.id}
             key={feat.title}
+            style={{ scrollMarginTop: "5rem" }}
             className={`flex flex-col ${
               feat.reverse ? "lg:flex-row-reverse" : "lg:flex-row"
             } items-center gap-12 lg:gap-20`}
