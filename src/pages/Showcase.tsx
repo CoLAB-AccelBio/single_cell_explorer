@@ -47,6 +47,7 @@ function RevealSection({
 /* ------------------------------------------------------------------ */
 interface FeatureSection {
   icon: React.ElementType;
+  id: string;
   title: string;
   description: string;
   details: string[];
