@@ -1,5 +1,6 @@
 import React, { useState } from "react";
-import { Info, Search, MousePointer2, Palette, BarChart3, GitCompareArrows, Play } from "lucide-react";
+import { Info, Search, MousePointer2, Palette, BarChart3, GitCompareArrows, Play, Presentation } from "lucide-react";
+import { Link } from "react-router-dom";
 import { DatasetMetadata } from "@/types/singleCell";
 import accelBioLogo from "@/assets/AccelBio_logo.png";
 import {
@@ -93,6 +94,15 @@ export function Header({ metadata, onStartTour }: HeaderProps) {
                 <div className="text-xs text-muted-foreground">Clusters</div>
               </div>
             </div>
+
+            <Link
+              to="/showcase"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-accent/15 hover:bg-accent/25 text-accent-foreground text-sm font-medium transition-colors"
+              title="Feature showcase"
+            >
+              <Presentation className="h-3.5 w-3.5" />
+              Showcase
+            </Link>
 
             {onStartTour && (
               <button
