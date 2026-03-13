@@ -244,6 +244,17 @@ export default function Showcase() {
             </div>
           </RevealSection>
 
+          <div className="mt-12 max-w-5xl mx-auto">
+            <div className="rounded-xl overflow-hidden shadow-2xl border border-border ring-1 ring-primary/10">
+              <img
+                src="/showcase/dashboard-hero.png"
+                alt="Single-Cell Explorer full dashboard showing scatter plots, cell type legend, and analysis controls"
+                className="w-full h-auto"
+                loading="eager"
+              />
+            </div>
+          </div>
+
           <div className="mt-8 animate-bounce text-muted-foreground">
             <ChevronDown className="h-6 w-6 mx-auto" />
           </div>
