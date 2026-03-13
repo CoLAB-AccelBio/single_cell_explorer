@@ -1,4 +1,4 @@
-# AccelBio Single-Cell RNA-seq Explorer
+# Single-Cell RNA-seq Explorer
 
 An interactive web portal for exploring and visualizing single-cell RNA sequencing (scRNA-seq) data. Built with React, TypeScript, and modern visualization libraries.
 
