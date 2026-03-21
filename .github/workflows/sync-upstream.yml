@@ -27,7 +27,7 @@ jobs:
 
       - name: Add upstream and sync
         run: |
-          git remote add upstream https://github.com/JMarzec/single_cell_explorer.git || true
+          git remote add upstream https://github.com/JMarzec/single-cell-explorer-21d646ca || true
           git fetch upstream
           git checkout main
           git merge upstream/main
