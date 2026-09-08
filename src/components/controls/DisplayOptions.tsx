@@ -10,17 +10,19 @@ interface DisplayOptionsProps {
   clusters: ClusterInfo[];
   settings: VisualizationSettings;
   onSettingsChange: (settings: Partial<VisualizationSettings>) => void;
+  noCard?: boolean;
 }
 
 export function DisplayOptions({
   clusters,
   settings,
   onSettingsChange,
+  noCard,
 }: DisplayOptionsProps) {
-  return (
-    <div className="space-y-6 p-4 bg-card border border-border rounded-lg">
+  const content = (
+    <div className="space-y-6">
       <div className="space-y-4">
-        <h3 className="text-sm font-semibold text-foreground">Display Options</h3>
+
 
         <div className="space-y-2">
           <Label className="text-xs text-muted-foreground">Point Size</Label>
