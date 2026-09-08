@@ -1,5 +1,6 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from "react";
 import { Helmet } from "react-helmet-async";
+import { ChevronDown } from "lucide-react";
 import { Header } from "@/components/layout/Header";
 import { ScatterPlot } from "@/components/scatter/ScatterPlot";
 import { CellFilter } from "@/components/controls/CellFilter";
@@ -14,6 +15,7 @@ import { PathwayEnrichment } from "@/components/analysis/PathwayEnrichment";
 import { TrajectoryAnalysis } from "@/components/analysis/TrajectoryAnalysis";
 import { PseudotimeHeatmap } from "@/components/analysis/PseudotimeHeatmap";
 import { calculatePseudotime } from "@/components/analysis/TrajectoryAnalysis";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 import { generateDemoDataset } from "@/data/demoData";
 import { fetchCoreDataset, fetchExpressionMatrix, LoadProgress } from "@/lib/datasetLoader";
@@ -26,6 +28,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ProductTour, TourStep } from "@/components/tour/ProductTour";
 import { Progress } from "@/components/ui/progress";
+
 
 const tourSteps: TourStep[] = [
   {
