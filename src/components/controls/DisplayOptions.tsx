@@ -152,4 +152,17 @@ export function DisplayOptions({
       </div>
     </div>
   );
+
+  if (noCard) {
+    return content;
+  }
+
+  return (
+    <div className="space-y-6 p-4 bg-card border border-border rounded-lg">
+      <div className="space-y-4">
+        <h3 className="text-sm font-semibold text-foreground">Display Options</h3>
+        {content}
+      </div>
+    </div>
+  );
 }
