@@ -512,9 +512,9 @@ const Index = () => {
 
 
         {/* Dual Plot Layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6 items-stretch">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6 items-start">
           {/* Left Plot - Metadata Annotation */}
-          <div className="flex flex-col gap-4 h-full" data-tour="metadata-plot">
+          <div className="flex flex-col gap-4" data-tour="metadata-plot">
             <div className="flex items-center justify-between p-3 min-h-[66px] bg-card border border-border rounded-lg">
               <h2 className="font-semibold text-foreground text-base">Metadata Annotation</h2>
               <Select value={selectedAnnotation} onValueChange={setSelectedAnnotation}>
@@ -546,8 +546,9 @@ const Index = () => {
               />
             </div>
             
-            {/* Annotation Legend */}
-            <div className="mt-auto">
+            {/* Left controls stacked directly under the plot */}
+            <div className="space-y-4">
+              {/* Annotation Legend */}
               {(() => {
                 const cellCounts: Record<string, number> = {};
                 dataset.cells.forEach(cell => {
@@ -582,11 +583,26 @@ const Index = () => {
                   </div>
                 );
               })()}
+
+              <CellFilter
+                cells={dataset.cells}
+                clusters={dataset.clusters}
+                filter={settings.cellFilter}
+                onFilterChange={(filter) => handleSettingsChange({ cellFilter: filter })}
+              />
+
+              <ClusterAnnotationTool
+                clusters={dataset.clusters}
+                onRenameCluster={handleRenameCluster}
+                onMergeClusters={handleMergeClusters}
+                onChangeClusterColor={handleChangeClusterColor}
+                onResetClusters={handleResetClusters}
+              />
             </div>
           </div>
 
           {/* Right Plot - Gene Expression */}
-          <div className="flex flex-col gap-4 h-full" data-tour="expression-plot">
+          <div className="flex flex-col gap-4" data-tour="expression-plot">
             <div className="p-3 min-h-[66px] bg-card border border-border rounded-lg">
               <h2 className="font-semibold text-foreground text-base">
                 Gene Expression
@@ -627,8 +643,8 @@ const Index = () => {
               />
             </div>
 
-            {/* Gene Selection + Expression Level Legend */}
-            <div className="mt-auto space-y-4">
+            {/* Right controls stacked directly under the plot */}
+            <div className="space-y-4">
               {/* Gene Selection */}
               <div
                 data-tour="gene-selection"
@@ -651,7 +667,6 @@ const Index = () => {
                 )}
               </div>
 
-              
               {/* Expression Level Legend */}
               {effectiveGeneLabel && !plotGeneUndetected && (
                 <div className="bg-card border border-border rounded-lg p-3">
@@ -671,37 +686,38 @@ const Index = () => {
                   )}
                 </div>
               )}
+
+              {/* Display Options - expandable */}
+              <Collapsible
+                open={displayOptionsOpen}
+                onOpenChange={setDisplayOptionsOpen}
+                data-tour="display-options"
+              >
+                <div className="bg-card border border-border rounded-lg overflow-hidden">
+                  <CollapsibleTrigger asChild>
+                    <button className="w-full flex items-center justify-between p-3 text-left hover:bg-muted/50 transition-colors">
+                      <h3 className="text-sm font-semibold text-foreground">Display Options</h3>
+                      <ChevronDown
+                        className={`h-4 w-4 text-muted-foreground transition-transform ${displayOptionsOpen ? "rotate-180" : ""}`}
+                      />
+                    </button>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <div className="px-3 pb-3">
+                      <DisplayOptions
+                        noCard
+                        clusters={dataset.clusters}
+                        settings={settings}
+                        onSettingsChange={handleSettingsChange}
+                      />
+                    </div>
+                  </CollapsibleContent>
+                </div>
+              </Collapsible>
             </div>
-
           </div>
         </div>
 
-        {/* Filters, Cluster Annotation & Display Options */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="space-y-4">
-            <CellFilter
-              cells={dataset.cells}
-              clusters={dataset.clusters}
-              filter={settings.cellFilter}
-              onFilterChange={(filter) => handleSettingsChange({ cellFilter: filter })}
-            />
-
-            <ClusterAnnotationTool
-              clusters={dataset.clusters}
-              onRenameCluster={handleRenameCluster}
-              onMergeClusters={handleMergeClusters}
-              onChangeClusterColor={handleChangeClusterColor}
-              onResetClusters={handleResetClusters}
-            />
-          </div>
-          <div data-tour="display-options">
-            <DisplayOptions
-              clusters={dataset.clusters}
-              settings={settings}
-              onSettingsChange={handleSettingsChange}
-            />
-          </div>
-        </div>
 
         {/* Analysis Tabs */}
         <div className="space-y-6 mt-6" data-tour="analysis-tabs">
