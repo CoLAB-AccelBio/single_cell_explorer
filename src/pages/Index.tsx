@@ -119,10 +119,12 @@ const Index = () => {
   const [remoteError, setRemoteError] = useState<string | null>(null);
   const [errorScope, setErrorScope] = useState<"core" | "expression" | null>(null);
   const [tourOpen, setTourOpen] = useState(false);
+  const [displayOptionsOpen, setDisplayOptionsOpen] = useState(false);
   const originalDatasetRef = useRef<SingleCellDataset>(defaultDataset);
   const coreLoadedRef = useRef(false);
   const exprAbortRef = useRef<AbortController | null>(null);
   const [exprAttempt, setExprAttempt] = useState(0);
+
 
 
   // Load the small core dataset first so the dashboard renders quickly,
