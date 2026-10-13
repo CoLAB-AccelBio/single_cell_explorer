@@ -38,11 +38,11 @@ jobs:
           git checkout main
           git merge upstream/main --allow-unrelated-histories --no-edit -X theirs
 
-      - name: Mirror LFS objects (best effort)
-        continue-on-error: true
+      - name: Mirror LFS objects
         run: |
-          git lfs fetch upstream main --include="public/heart_organoid_S1_3_annot.json"
-          git lfs push origin main
+          git lfs fetch --all upstream
+          git lfs push --all origin
+
 
       - name: Push
         run: git push --no-verify origin main
