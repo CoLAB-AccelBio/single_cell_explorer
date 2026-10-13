@@ -33,9 +33,24 @@ export interface DatasetMetadata {
   cellCount: number;
   geneCount: number;
   clusterCount: number;
+  cellTypeCount: number;
   organism?: string;
   tissue?: string;
   source?: string;
+}
+
+/**
+ * Read-only access to expression values. Implementations store data sparsely in
+ * typed arrays and expand a single gene to dense values on demand.
+ */
+export interface ExpressionMatrix {
+  /** Cell IDs in the same order as the dense arrays returned by getValues */
+  cellIds: string[];
+  /** Genes present in the matrix */
+  genes: string[];
+  hasGene(gene: string): boolean;
+  /** Dense values aligned to cellIds, or undefined when the gene is absent */
+  getValues(gene: string): Float32Array | undefined;
 }
 
 export interface SingleCellDataset {
@@ -44,11 +59,14 @@ export interface SingleCellDataset {
   genes: string[];
   clusters: ClusterInfo[];
   differentialExpression: DifferentialExpression[];
-  // Expression matrix: gene -> (cellId -> expression value)
-  expression?: Record<string, Record<string, number>>;
+  // Expression values, sparsely stored (undefined until loaded)
+  expression?: ExpressionMatrix;
+  /** True only for the built-in demo dataset, where illustrative expression values may be generated. */
+  syntheticExpression?: boolean;
   // Metadata annotation options (e.g., cell_type, sample)
   annotationOptions?: string[];
 }
+
 
 export type ColorPalette = 'viridis' | 'magma' | 'plasma' | 'inferno' | 'grrd' | 'blues';
 

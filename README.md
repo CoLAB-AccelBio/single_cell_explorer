@@ -21,10 +21,14 @@ An interactive web portal for exploring and visualizing single-cell RNA sequenci
 - **Trajectory Analysis**: Pseudotime visualization for developmental lineages with branching paths
 
 ### Data Handling
-- **JSON Data Import**: Upload your own datasets exported from Seurat/Scanpy
-- **R Export Script**: Downloadable template script for exporting Seurat objects
 - **Cell Filtering**: Subset cells by sample, cluster, or other metadata
-- **Demo Dataset**: Pre-loaded developmental heart data for exploration
+- **Bundled Dataset**: A pre-processed heart organoid dataset loads automatically (progressive loading with a cancellable progress indicator)
+- **Explicit "not detected" state**: Genes absent from the expression matrix are reported as not detected (zeroed plots, tooltips say "not detected") — values are never invented
+
+> Datasets can be swapped at runtime on the **/dataset-swap** page: upload a Seurat/Scanpy JSON
+> (parsed in your browser, session-only) or register hosted `dataset_core.json` /
+> `dataset_expression.msgpack` URLs. Changing the *default* dataset is still a build-time edit.
+
 
 ## Getting Started
 
@@ -49,9 +53,25 @@ The app will be available at `http://localhost:5173`
 
 ## Data Format
 
-### Uploading Custom Data
+### Swapping in your own dataset
 
-Export your Seurat or Scanpy object to JSON using the provided R template script. The expected format:
+Use **/dataset-swap** for ad-hoc swaps (upload or URL). To change the shipped default, export
+your Seurat/Scanpy object to the JSON format below, then split and compress it for the browser:
+
+
+
+```bash
+python scripts/compress_dataset.py my_dataset.json public/
+# -> public/dataset_core.json (small, loaded first)
+# -> public/dataset_expression.msgpack (sparse expression, streamed in background)
+```
+
+Set the URLs in `src/lib/datasetConfig.ts` if you host the files elsewhere. Both files are
+downloaded and decoded in a Web Worker (`src/workers/datasetWorker.ts`) with a progress bar,
+so the dashboard stays responsive. Full step-by-step guide: [DATASET.md](./DATASET.md).
+The expected input format:
+
+
 
 ```json
 {
@@ -97,10 +117,10 @@ Export your Seurat or Scanpy object to JSON using the provided R template script
 
 ### R Export Script
 
-Download the R export template from the app to convert your Seurat object:
+A Seurat export template lives in the repository (not downloadable from the app):
 
 ```r
-Rscript export_template.R seurat_object.rds output.json
+Rscript scripts/SC_dashboard_export_template.R seurat_object.rds output.json
 ```
 
 ## Technology Stack
@@ -112,6 +132,13 @@ Rscript export_template.R seurat_object.rds output.json
 - **Scatter Plots**: Canvas-based with deck.gl
 - **State Management**: React hooks
 - **Search**: Fuse.js for fuzzy gene search
+- **Expression storage**: sparse typed arrays decoded from MessagePack
+
+## QA instrumentation
+
+Dataset download and decode phases are timed and logged to the browser console
+(`[perf] …`), including used/peak JS heap where the browser exposes it
+(`src/lib/perf.ts`). Use these logs to catch hangs or memory blow-ups.
 
 ## Project Structure
 
@@ -122,13 +149,13 @@ src/
 │   ├── layout/        # Header, navigation
 │   ├── plots/         # Violin, Feature, Dot plots
 │   ├── scatter/       # UMAP scatter plot components
-│   ├── table/         # Differential expression table
-│   └── upload/        # Dataset uploader
-├── data/              # Demo data generation
-├── lib/               # Utility functions
+│   └── table/         # Differential expression table
+├── data/              # Fallback demo data generation
+├── lib/               # Dataset loading, sparse matrix, perf instrumentation
 ├── pages/             # Page components
 └── types/             # TypeScript interfaces
 ```
+
 
 ## Contributing
 

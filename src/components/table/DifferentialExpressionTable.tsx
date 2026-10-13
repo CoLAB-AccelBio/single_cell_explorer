@@ -1,34 +1,49 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useRef } from "react";
 import {
   useReactTable,
   getCoreRowModel,
   getSortedRowModel,
   getFilteredRowModel,
-  getPaginationRowModel,
   flexRender,
   createColumnHelper,
   SortingState,
 } from "@tanstack/react-table";
-import { DifferentialExpression } from "@/types/singleCell";
+import { useVirtualizer } from "@tanstack/react-virtual";
+import { DifferentialExpression, ClusterInfo } from "@/types/singleCell";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { ChevronLeft, ChevronRight, ArrowUpDown, Search } from "lucide-react";
+import { ArrowUpDown, Search } from "lucide-react";
 
 interface DifferentialExpressionTableProps {
   data: DifferentialExpression[];
+  clusters?: ClusterInfo[];
   onGeneClick?: (gene: string) => void;
 }
 
+const ROW_HEIGHT = 36;
 const columnHelper = createColumnHelper<DifferentialExpression>();
 
 export function DifferentialExpressionTable({
   data,
+  clusters,
   onGeneClick,
 }: DifferentialExpressionTableProps) {
   const [sorting, setSorting] = useState<SortingState>([
     { id: "logFC", desc: true },
   ]);
   const [globalFilter, setGlobalFilter] = useState("");
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+
+  const clusterNameMap = useMemo(() => {
+    const map = new Map<string, string>();
+    if (clusters) {
+      clusters.forEach((c) => {
+        map.set(`Cl_${c.id}`, c.name);
+        map.set(String(c.id), c.name);
+        map.set(c.name, c.name);
+      });
+    }
+    return map;
+  }, [clusters]);
 
   const columns = useMemo(
     () => [
@@ -67,6 +82,24 @@ export function DifferentialExpressionTable({
           </span>
         ),
       }),
+      {
+        id: "cellType",
+        accessorFn: (row: DifferentialExpression) => clusterNameMap.get(row.cluster) || "",
+        header: ({ column }: any) => (
+          <button
+            className="flex items-center gap-1 hover:text-primary transition-colors"
+            onClick={() => column.toggleSorting()}
+          >
+            Cell Type
+            <ArrowUpDown className="h-3 w-3" />
+          </button>
+        ),
+        cell: (info: any) => (
+          <span className="text-xs text-muted-foreground">
+            {(info.getValue() as string) || "—"}
+          </span>
+        ),
+      },
       columnHelper.accessor("logFC", {
         header: ({ column }) => (
           <button
@@ -107,8 +140,18 @@ export function DifferentialExpressionTable({
         },
       }),
     ],
-    [onGeneClick]
+    [onGeneClick, clusterNameMap]
   );
+
+  const globalFilterFn = useMemo(() => {
+    return (row: any, _columnId: string, filterValue: string) => {
+      const search = filterValue.toLowerCase();
+      const gene = String(row.original.gene).toLowerCase();
+      const cluster = String(row.original.cluster).toLowerCase();
+      const cellType = (clusterNameMap.get(row.original.cluster) || "").toLowerCase();
+      return gene.includes(search) || cluster.includes(search) || cellType.includes(search);
+    };
+  }, [clusterNameMap]);
 
   const table = useReactTable({
     data,
@@ -119,20 +162,24 @@ export function DifferentialExpressionTable({
     },
     onSortingChange: setSorting,
     onGlobalFilterChange: setGlobalFilter,
+    globalFilterFn,
     getCoreRowModel: getCoreRowModel(),
     getSortedRowModel: getSortedRowModel(),
     getFilteredRowModel: getFilteredRowModel(),
-    getPaginationRowModel: getPaginationRowModel(),
-    initialState: {
-      pagination: {
-        pageSize: 10,
-      },
-    },
+  });
+
+  const { rows } = table.getRowModel();
+
+  const virtualizer = useVirtualizer({
+    count: rows.length,
+    getScrollElement: () => scrollContainerRef.current,
+    estimateSize: () => ROW_HEIGHT,
+    overscan: 20,
   });
 
   return (
-    <div className="bg-card border border-border rounded-lg overflow-hidden">
-      <div className="p-4 border-b border-border">
+    <div className="bg-card border border-border rounded-lg overflow-hidden max-h-[600px] flex flex-col">
+      <div className="p-4 border-b border-border shrink-0">
         <div className="flex items-center justify-between gap-4">
           <h3 className="text-sm font-semibold text-foreground">
             Differential Expression
@@ -140,7 +187,7 @@ export function DifferentialExpressionTable({
           <div className="relative flex-1 max-w-xs">
             <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
             <Input
-              placeholder="Search genes..."
+              placeholder="Search genes, clusters, cell types..."
               value={globalFilter}
               onChange={(e) => setGlobalFilter(e.target.value)}
               className="pl-10 h-8 text-sm"
@@ -149,11 +196,11 @@ export function DifferentialExpressionTable({
         </div>
       </div>
 
-      <div className="overflow-x-auto">
+      <div ref={scrollContainerRef} className="overflow-auto flex-1">
         <table className="w-full">
-          <thead>
+          <thead className="sticky top-0 z-10 bg-muted">
             {table.getHeaderGroups().map((headerGroup) => (
-              <tr key={headerGroup.id} className="border-b border-border bg-muted/50">
+              <tr key={headerGroup.id} className="border-b border-border">
                 {headerGroup.headers.map((header) => (
                   <th
                     key={header.id}
@@ -170,58 +217,55 @@ export function DifferentialExpressionTable({
               </tr>
             ))}
           </thead>
-          <tbody className="divide-y divide-border">
-            {table.getRowModel().rows.map((row) => (
-              <tr
-                key={row.id}
-                className="hover:bg-secondary/50 transition-colors"
-              >
-                {row.getVisibleCells().map((cell) => (
-                  <td
-                    key={cell.id}
-                    className="px-4 py-2 text-sm text-foreground"
-                  >
-                    {flexRender(cell.column.columnDef.cell, cell.getContext())}
-                  </td>
-                ))}
+          <tbody>
+            {virtualizer.getVirtualItems().length > 0 && (
+              <tr>
+                <td
+                  colSpan={columns.length}
+                  style={{ height: virtualizer.getVirtualItems()[0].start, padding: 0 }}
+                />
               </tr>
-            ))}
+            )}
+            {virtualizer.getVirtualItems().map((virtualRow) => {
+              const row = rows[virtualRow.index];
+              return (
+                <tr
+                  key={row.id}
+                  className="hover:bg-secondary/50 transition-colors border-b border-border"
+                  style={{ height: ROW_HEIGHT }}
+                >
+                  {row.getVisibleCells().map((cell) => (
+                    <td
+                      key={cell.id}
+                      className="px-4 py-2 text-sm text-foreground"
+                    >
+                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                    </td>
+                  ))}
+                </tr>
+              );
+            })}
+            {virtualizer.getVirtualItems().length > 0 && (
+              <tr>
+                <td
+                  colSpan={columns.length}
+                  style={{
+                    height:
+                      virtualizer.getTotalSize() -
+                      (virtualizer.getVirtualItems().at(-1)?.end ?? 0),
+                    padding: 0,
+                  }}
+                />
+              </tr>
+            )}
           </tbody>
         </table>
       </div>
 
-      <div className="p-4 border-t border-border flex items-center justify-between">
-        <div className="text-xs text-muted-foreground">
-          Showing {table.getState().pagination.pageIndex * 10 + 1} to{" "}
-          {Math.min(
-            (table.getState().pagination.pageIndex + 1) * 10,
-            table.getFilteredRowModel().rows.length
-          )}{" "}
-          of {table.getFilteredRowModel().rows.length.toLocaleString()} entries
-        </div>
-
-        <div className="flex items-center gap-2">
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => table.previousPage()}
-            disabled={!table.getCanPreviousPage()}
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </Button>
-          <span className="text-sm text-muted-foreground">
-            Page {table.getState().pagination.pageIndex + 1} of{" "}
-            {table.getPageCount()}
-          </span>
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => table.nextPage()}
-            disabled={!table.getCanNextPage()}
-          >
-            <ChevronRight className="h-4 w-4" />
-          </Button>
-        </div>
+      <div className="p-3 border-t border-border shrink-0">
+        <span className="text-xs text-muted-foreground">
+          {table.getFilteredRowModel().rows.length.toLocaleString()} entries
+        </span>
       </div>
     </div>
   );

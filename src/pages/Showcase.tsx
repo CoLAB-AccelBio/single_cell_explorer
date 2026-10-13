@@ -1,5 +1,7 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
+import { Helmet } from "react-helmet-async";
 import { Link } from "react-router-dom";
+import { fetchCoreDataset } from "@/lib/datasetLoader";
 import { useScrollReveal } from "@/hooks/useScrollReveal";
 import accelBioLogo from "@/assets/AccelBio_logo.png";
 import {
@@ -7,7 +9,7 @@ import {
   Search,
   BarChart3,
   GitCompareArrows,
-  Layers,
+  
   Palette,
   ArrowRight,
   ChevronDown,
@@ -134,22 +136,6 @@ const features: FeatureSection[] = [
     screenshotAlt: "Display options panel",
     imageUrl: "/showcase/display.png",
   },
-  {
-    icon: Layers,
-    id: "upload",
-    title: "Upload Your Own Data",
-    description:
-      "Bring your own single-cell dataset in JSON format. The explorer instantly loads your data — no server required, everything runs in the browser.",
-    details: [
-      "JSON format with embeddings & expression",
-      "Client-side processing — no data leaves your machine",
-      "Automatic cluster detection",
-      "Works with any t-SNE / UMAP output",
-    ],
-    screenshotAlt: "Dataset upload interface",
-    imageUrl: "/showcase/upload.png",
-    reverse: true,
-  },
 ];
 
 /* ------------------------------------------------------------------ */
@@ -173,16 +159,67 @@ function StatCounter({ value, label }: { value: string; label: string }) {
 }
 
 /* ------------------------------------------------------------------ */
+/*  Dynamic dataset stats                                              */
+/* ------------------------------------------------------------------ */
+function DatasetStats() {
+  const [stats, setStats] = useState<{ cells: string; genes: string; clusters: string } | null>(null);
+
+  useEffect(() => {
+    fetchCoreDataset()
+      .then((ds) => {
+        setStats({
+          cells: ds.metadata.cellCount.toLocaleString(),
+          genes: ds.metadata.geneCount.toLocaleString(),
+          clusters: ds.metadata.cellTypeCount.toLocaleString(),
+        });
+      })
+      .catch(() => {
+        setStats({ cells: "—", genes: "—", clusters: "—" });
+      });
+  }, []);
+
+  if (!stats) {
+    return (
+      <section className="border-y border-border bg-card">
+        <div className="container mx-auto px-4 py-12 grid grid-cols-3 gap-8">
+          <StatCounter value="..." label="Cells" />
+          <StatCounter value="..." label="Genes available" />
+          <StatCounter value="..." label="Cell types" />
+        </div>
+      </section>
+    );
+  }
+
+  return (
+    <section className="border-y border-border bg-card">
+      <div className="container mx-auto px-4 py-12 grid grid-cols-3 gap-8">
+        <StatCounter value={stats.cells} label="Cells" />
+        <StatCounter value={stats.genes} label="Genes available" />
+        <StatCounter value={stats.clusters} label="Cell types" />
+      </div>
+    </section>
+  );
+}
+
+/* ------------------------------------------------------------------ */
 /*  Main page                                                          */
 /* ------------------------------------------------------------------ */
 export default function Showcase() {
   return (
     <div className="min-h-screen bg-background text-foreground">
+      <Helmet>
+        <title>Single-Cell Explorer — Features & Showcase</title>
+        <meta name="description" content="Discover Single-Cell Explorer features: interactive t-SNE and UMAP visualization, gene expression search, violin and dot plots, and differential expression analysis." />
+        <link rel="canonical" href="https://accelbio-single-cell-explorer.lovable.app/showcase" />
+        <meta property="og:title" content="Explore Single-Cell Data Interactively" />
+        <meta property="og:description" content="Interactive t-SNE/UMAP visualization, gene expression search, violin & dot plots, and differential expression — all in the browser." />
+        <meta property="og:url" content="https://accelbio-single-cell-explorer.lovable.app/showcase" />
+      </Helmet>
       {/* ── Navigation ── */}
       <nav className="sticky top-0 z-50 border-b border-border bg-card/80 backdrop-blur-md">
         <div className="container mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <img src={accelBioLogo} alt="AccelBio" className="h-10 w-auto" />
+            <img src={accelBioLogo} alt="AccelBio company logo" className="h-10 w-auto" />
             <span className="font-semibold text-foreground">
               Single-Cell Explorer
             </span>
@@ -250,26 +287,26 @@ export default function Showcase() {
                 src="/showcase/dashboard-hero.png"
                 alt="Single-Cell Explorer full dashboard showing scatter plots, cell type legend, and analysis controls"
                 className="w-full h-auto"
+                width="1600"
+                height="900"
                 loading="eager"
+                fetchPriority="high"
               />
             </div>
           </div>
 
-          <div className="mt-8 animate-bounce text-muted-foreground">
-            <ChevronDown className="h-6 w-6 mx-auto" />
+          {/* Scroll indicator */}
+          <div className="mt-10 flex flex-col items-center gap-2 text-muted-foreground">
+            <span className="text-xs font-medium uppercase tracking-widest">Scroll to explore features</span>
+            <div className="animate-bounce">
+              <ChevronDown className="h-6 w-6" />
+            </div>
           </div>
         </div>
       </section>
 
       {/* ── Stats ── */}
-      <section className="border-y border-border bg-card">
-        <div className="container mx-auto px-4 py-12 grid grid-cols-2 md:grid-cols-4 gap-8">
-          <StatCounter value="19,024" label="Cells in demo dataset" />
-          <StatCounter value="926" label="Genes available" />
-          <StatCounter value="9" label="Cell clusters" />
-          <StatCounter value="0 s" label="Server setup needed" />
-        </div>
-      </section>
+      <DatasetStats />
 
       {/* ── Features ── */}
       <section className="container mx-auto px-4 py-20 space-y-32">
@@ -344,8 +381,7 @@ export default function Showcase() {
               Ready to explore?
             </h2>
             <p className="text-muted-foreground max-w-xl mx-auto mb-8">
-              No installation, no sign-up. Load the demo dataset or upload your
-              own — start analysing in seconds.
+              No installation, no sign-up. Load the demo dataset and start analysing in seconds.
             </p>
             <Link
               to="/"

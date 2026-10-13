@@ -3,21 +3,65 @@ import { getGeneExpression as getDemoGeneExpression } from "@/data/demoData";
 
 /**
  * Get gene expression data from the dataset.
- * Uses real expression data if available, falls back to demo data generation.
+ * Uses real expression data when an expression matrix is present.
+ * If the matrix exists but the gene has no entries, the gene is not expressed
+ * (sparse encoding omits all-zero genes) so zeros are returned — never synthetic values.
+ * Synthetic demo values are only used for the built-in demo dataset (no matrix at all).
  */
 export function getExpressionData(
   dataset: SingleCellDataset,
   gene: string
 ): Map<string, number> {
-  // Check if dataset has real expression data
-  if (dataset.expression && dataset.expression[gene]) {
-    const exprData = dataset.expression[gene];
-    return new Map(Object.entries(exprData));
+  const matrix = dataset.expression;
+  if (matrix) {
+    const values = matrix.getValues(gene);
+    const result = new Map<string, number>();
+    const cellIds = matrix.cellIds;
+    for (let i = 0; i < cellIds.length; i++) {
+      // Gene absent from the matrix => no expression detected
+      result.set(cellIds[i], values ? values[i] : 0);
+    }
+    return result;
   }
-  
-  // Fallback to demo data generation
-  return getDemoGeneExpression(dataset.cells, gene);
+
+  // Demo dataset only: generated illustrative values
+  if (dataset.syntheticExpression) {
+    return getDemoGeneExpression(dataset.cells, gene);
+  }
+
+  // Real dataset without a loaded matrix: no expression data available
+  const result = new Map<string, number>();
+  for (const cell of dataset.cells) result.set(cell.id, 0);
+  return result;
 }
+
+/**
+ * Genes that have no expression data available.
+ * When no matrix is loaded for a real dataset, every requested gene is
+ * unavailable — never fall back to fabricated values.
+ */
+export function getUndetectedGenes(
+  dataset: SingleCellDataset,
+  genes: string[]
+): string[] {
+  const matrix = dataset.expression;
+  if (!matrix) {
+    if (dataset.syntheticExpression) return [];
+    return genes.filter(Boolean);
+  }
+  return genes.filter((g) => g && !matrix.hasGene(g));
+}
+
+/** True when the gene has no expression data available. */
+export function isGeneUndetected(
+  dataset: SingleCellDataset,
+  gene: string | null
+): boolean {
+  if (!gene) return false;
+  return getUndetectedGenes(dataset, [gene]).length === 1;
+}
+
+
 
 /**
  * Get expression values for multiple genes.

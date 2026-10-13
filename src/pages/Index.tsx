@@ -1,4 +1,6 @@
 import React, { useState, useMemo, useCallback, useRef, useEffect } from "react";
+import { Helmet } from "react-helmet-async";
+import { ChevronDown } from "lucide-react";
 import { Header } from "@/components/layout/Header";
 import { ScatterPlot } from "@/components/scatter/ScatterPlot";
 import { CellFilter } from "@/components/controls/CellFilter";
@@ -13,31 +15,26 @@ import { PathwayEnrichment } from "@/components/analysis/PathwayEnrichment";
 import { TrajectoryAnalysis } from "@/components/analysis/TrajectoryAnalysis";
 import { PseudotimeHeatmap } from "@/components/analysis/PseudotimeHeatmap";
 import { calculatePseudotime } from "@/components/analysis/TrajectoryAnalysis";
-import { DatasetUploader } from "@/components/upload/DatasetUploader";
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
+
 import { generateDemoDataset } from "@/data/demoData";
-import { fetchRemoteDataset } from "@/lib/datasetLoader";
-import { getExpressionData, getMultiGeneExpression, getAveragedExpression, getAnnotationValues, getAnnotationColorMap, calculatePercentile } from "@/lib/expressionUtils";
+import { fetchCoreDataset, fetchExpressionMatrix, LoadProgress } from "@/lib/datasetLoader";
+import { getExpressionData, getMultiGeneExpression, getAveragedExpression, getAnnotationValues, getAnnotationColorMap, calculatePercentile, getUndetectedGenes, isGeneUndetected } from "@/lib/expressionUtils";
 import { getPaletteGradientCSS } from "@/lib/colorPalettes";
 import { VisualizationSettings, SingleCellDataset, CellFilterState as CellFilterType, Cell, ClusterInfo, ColorPalette } from "@/types/singleCell";
 import { Switch } from "@/components/ui/switch";
 import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
-import { Download } from "lucide-react";
-import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { ProductTour, TourStep } from "@/components/tour/ProductTour";
+import { Progress } from "@/components/ui/progress";
+
 
 const tourSteps: TourStep[] = [
   {
     target: "[data-tour='header']",
     title: "Welcome to Single-Cell Explorer",
     description: "This dashboard lets you explore single-cell datasets interactively. The header shows your dataset summary — total cells, genes, and clusters at a glance.",
-    position: "bottom",
-  },
-  {
-    target: "[data-tour='upload']",
-    title: "Upload Your Dataset",
-    description: "Click here to load your own single-cell dataset (JSON format) or use the pre-loaded heart organoid data.",
     position: "bottom",
   },
   {
@@ -115,22 +112,96 @@ const defaultCellFilter: CellFilterType = {
 const Index = () => {
   const [dataset, setDataset] = useState<SingleCellDataset>(defaultDataset);
   const [isLoadingRemote, setIsLoadingRemote] = useState(true);
+  const [loadProgress, setLoadProgress] = useState<LoadProgress>({ phase: "downloading", percent: 0, message: "Initialising…" });
+  const [exprProgress, setExprProgress] = useState<LoadProgress | null>(null);
+  const [exprReady, setExprReady] = useState(false);
+  const [exprCancelled, setExprCancelled] = useState(false);
+  const [remoteError, setRemoteError] = useState<string | null>(null);
+  const [errorScope, setErrorScope] = useState<"core" | "expression" | null>(null);
   const [tourOpen, setTourOpen] = useState(false);
+  const [displayOptionsOpen, setDisplayOptionsOpen] = useState(false);
   const originalDatasetRef = useRef<SingleCellDataset>(defaultDataset);
+  const coreLoadedRef = useRef(false);
+  const exprAbortRef = useRef<AbortController | null>(null);
+  const [exprAttempt, setExprAttempt] = useState(0);
 
-  // Fetch remote dataset on mount
+
+
+  // Load the small core dataset first so the dashboard renders quickly,
+  // then stream the expression matrix in the background (cancellable).
   useEffect(() => {
-    fetchRemoteDataset()
-      .then((remoteDataset) => {
-        console.log("Remote dataset loaded:", remoteDataset.metadata.name, remoteDataset.cells.length, "cells");
-        setDataset(remoteDataset);
-        originalDatasetRef.current = remoteDataset;
+    let cancelled = false;
+    const controller = new AbortController();
+    exprAbortRef.current = controller;
+
+    fetchCoreDataset((p) => setLoadProgress(p))
+      .then((core) => {
+        if (cancelled) return;
+        coreLoadedRef.current = true;
+        setDataset((prev) => (prev.expression ? { ...core, expression: prev.expression } : core));
+        originalDatasetRef.current = core;
+        setIsLoadingRemote(false);
+
+        setExprCancelled(false);
+        setExprProgress({ phase: "downloading", percent: 0, message: "Downloading expression matrix…" });
+
+        return fetchExpressionMatrix(
+          core.cells.map((c) => c.id),
+          (p) => {
+            if (!cancelled) setExprProgress(p);
+          },
+          controller.signal
+        ).then((expression) => {
+          if (cancelled) return;
+          setDataset((prev) => ({ ...prev, expression }));
+          originalDatasetRef.current = { ...originalDatasetRef.current, expression };
+          setExprReady(true);
+          setExprProgress(null);
+        });
       })
       .catch((err) => {
-        console.warn("Failed to load remote dataset, using demo data:", err);
-      })
-      .finally(() => setIsLoadingRemote(false));
+        if (cancelled) return;
+        const aborted =
+          (err instanceof DOMException && err.name === "AbortError") ||
+          controller.signal.aborted;
+        setExprProgress(null);
+        setIsLoadingRemote(false);
+        if (aborted) {
+          setExprCancelled(true);
+          return;
+        }
+        const msg = err instanceof Error ? err.message : String(err);
+        console.error("Failed to load remote dataset:", msg);
+        setRemoteError(msg);
+        setErrorScope(coreLoadedRef.current ? "expression" : "core");
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [exprAttempt]);
+
+  const handleCancelExpression = useCallback(() => {
+    exprAbortRef.current?.abort();
+    setExprProgress(null);
+    setExprCancelled(true);
   }, []);
+
+  const handleRetryExpression = useCallback(() => {
+    setExprCancelled(false);
+    setRemoteError(null);
+    setErrorScope(null);
+    setExprAttempt((n) => n + 1);
+  }, []);
+
+  // The demo fallback carries synthetic expression, so gene selection stays
+  // usable when the core dataset itself failed to download.
+  const geneSelectionUsable =
+    exprReady || (errorScope === "core" && dataset.syntheticExpression === true);
+
+
+
+
 
   // Selected cells from lasso/rectangle selection
   const [selectedCells, setSelectedCells] = useState<Cell[]>([]);
@@ -142,7 +213,7 @@ const Index = () => {
   const [settings, setSettings] = useState<VisualizationSettings>({
     pointSize: 2,
     showClusters: true,
-    showLabels: true,
+    showLabels: false,
     colorPalette: "grrd",
     selectedGene: null,
     selectedGenes: [],
@@ -190,6 +261,24 @@ const Index = () => {
     if (genes.length === 0) return {};
     return getMultiGeneExpression(dataset, genes);
   }, [settings.selectedGenes, dataset]);
+
+  // Genes that are absent from the loaded expression matrix ("not detected")
+  const undetectedGenes = useMemo(() => {
+    const genes = [
+      ...(settings.selectedGene ? [settings.selectedGene] : []),
+      ...(settings.selectedGenes || []),
+    ];
+    return getUndetectedGenes(dataset, Array.from(new Set(genes)));
+  }, [settings.selectedGene, settings.selectedGenes, dataset]);
+
+  const plotGeneUndetected = useMemo(() => {
+    if (settings.selectedGene) return isGeneUndetected(dataset, settings.selectedGene);
+    const genes = settings.selectedGenes || [];
+    if (!settings.showAveragedExpression || genes.length === 0) return false;
+    return getUndetectedGenes(dataset, genes).length === genes.length;
+  }, [settings.selectedGene, settings.selectedGenes, settings.showAveragedExpression, dataset]);
+
+
 
   const handleDatasetLoad = useCallback((newDataset: SingleCellDataset) => {
     setDataset(newDataset);
@@ -314,41 +403,120 @@ const Index = () => {
   }, []);
 
   if (isLoadingRemote) {
+    const isDownloading = loadProgress.phase === "downloading";
+    const showPercent = isDownloading && loadProgress.percent > 0;
     return (
-      <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-4">
+      <div className="min-h-screen bg-background flex flex-col items-center justify-center gap-6">
         <div className="animate-spin rounded-full h-12 w-12 border-4 border-muted border-t-primary" />
-        <p className="text-muted-foreground text-sm">Loading heart organoid dataset…</p>
+        <div className="text-center space-y-2">
+          <p className="text-foreground font-medium">Loading dataset…</p>
+          <p className="text-muted-foreground text-sm" role="status" aria-live="polite">
+            {loadProgress.message}
+          </p>
+        </div>
+        <div className="w-64">
+          <Progress value={showPercent ? loadProgress.percent : undefined} className="h-2" />
+          {showPercent && (
+            <p className="text-xs text-muted-foreground text-center mt-1">{loadProgress.percent}%</p>
+          )}
+        </div>
+        <button
+          onClick={handleCancelExpression}
+          className="text-xs text-muted-foreground underline hover:text-foreground"
+        >
+          Cancel download
+        </button>
       </div>
     );
   }
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
+      {remoteError && (
+        <div className="bg-destructive/10 border-b border-destructive/30 px-4 py-3 text-center">
+          <p className="text-sm text-destructive font-medium">
+            ⚠{" "}
+            {errorScope === "core"
+              ? `Failed to load the selected dataset: ${remoteError}`
+              : `Failed to load the expression matrix: ${remoteError}`}
+          </p>
+          <p className="text-xs text-muted-foreground mt-1">
+            {errorScope === "core"
+              ? "Showing the built-in demo dataset instead — the cells, annotations and expression values below are illustrative demo data, not your dataset."
+              : "Cells and annotations are shown from the real dataset, but gene expression is unavailable — no expression values are displayed."}
+          </p>
+
+          <button
+            onClick={handleRetryExpression}
+            className="mt-2 text-xs font-medium text-primary underline hover:no-underline"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+      {exprProgress && (
+        <div className="bg-primary/10 border-b border-primary/20 px-4 py-2">
+          <div className="container mx-auto flex items-center gap-3">
+            <p
+              className="text-xs text-muted-foreground whitespace-nowrap"
+              role="status"
+              aria-live="polite"
+            >
+              {exprProgress.message}
+            </p>
+            <Progress
+              value={exprProgress.percent > 0 ? exprProgress.percent : undefined}
+              className="h-1.5 flex-1"
+            />
+            <p className="text-xs text-muted-foreground w-10 text-right">
+              {exprProgress.percent}%
+            </p>
+            <button
+              onClick={handleCancelExpression}
+              className="text-xs text-muted-foreground underline hover:text-foreground whitespace-nowrap"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+      {exprCancelled && !exprReady && (
+        <div className="bg-muted border-b border-border px-4 py-2">
+          <div className="container mx-auto flex items-center justify-center gap-3">
+            <p className="text-xs text-muted-foreground">
+              Expression matrix download cancelled — gene expression features are unavailable.
+            </p>
+            <button
+              onClick={handleRetryExpression}
+              className="text-xs font-medium text-primary underline hover:no-underline"
+            >
+              Resume download
+            </button>
+          </div>
+        </div>
+      )}
+
       <Header metadata={dataset.metadata} onStartTour={() => setTourOpen(true)} />
       <ProductTour steps={tourSteps} isOpen={tourOpen} onClose={() => setTourOpen(false)} />
 
       <main className="flex-1 container mx-auto px-4 py-6">
-        {/* Controls row */}
-        <div className="mb-4 flex flex-wrap items-center gap-4" data-tour="upload">
-          <DatasetUploader 
-            onDatasetLoad={handleDatasetLoad} 
-            buttonVariant="outline"
-          />
-          
-          <Button variant="ghost" size="sm" asChild>
-            <a href="/export_template.R" download className="gap-2">
-              <Download className="h-4 w-4" />
-              R Export Script
-            </a>
-          </Button>
-        </div>
+        <Helmet>
+          <title>Single-Cell Explorer Dashboard — Interactive scRNA-seq</title>
+          <meta name="description" content="Explore single-cell RNA-seq datasets interactively: t-SNE/UMAP embeddings, gene expression overlays, violin and dot plots, and differential expression." />
+          <link rel="canonical" href="https://accelbio-single-cell-explorer.lovable.app/" />
+          <meta property="og:title" content="Single-Cell Explorer Dashboard" />
+          <meta property="og:description" content="Interactive browser-based exploration of single-cell datasets — embeddings, gene search, and differential expression." />
+          <meta property="og:url" content="https://accelbio-single-cell-explorer.lovable.app/" />
+        </Helmet>
+        <h1 className="sr-only">Single-Cell Explorer Dashboard</h1>
+
 
         {/* Dual Plot Layout */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6 items-start">
           {/* Left Plot - Metadata Annotation */}
-          <div className="space-y-4" data-tour="metadata-plot">
-            <div className="flex items-center justify-between p-3 bg-card border border-border rounded-lg">
-              <h3 className="font-semibold text-foreground">Metadata Annotation</h3>
+          <div className="flex flex-col gap-4" data-tour="metadata-plot">
+            <div className="flex items-center justify-between p-3 min-h-[66px] bg-card border border-border rounded-lg">
+              <h2 className="font-semibold text-foreground text-base">Metadata Annotation</h2>
               <Select value={selectedAnnotation} onValueChange={setSelectedAnnotation}>
                 <SelectTrigger className="w-40">
                   <SelectValue placeholder="Select annotation" />
@@ -378,52 +546,80 @@ const Index = () => {
               />
             </div>
             
-            {/* Annotation Legend */}
-            {(() => {
-              const cellCounts: Record<string, number> = {};
-              dataset.cells.forEach(cell => {
-                const val = annotationData.getCellValue(cell);
-                cellCounts[val] = (cellCounts[val] || 0) + 1;
-              });
-              return (
-                <div className="bg-card border border-border rounded-lg p-3">
-                  <h4 className="text-sm font-medium text-foreground mb-2">
-                    {selectedAnnotation.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
-                  </h4>
-                  <div className="max-h-32 overflow-y-auto">
-                    <div className="grid grid-cols-2 gap-1">
-                      {annotationData.values.slice(0, 20).map((value, idx) => (
-                        <div key={idx} className="flex items-center gap-2 text-xs">
-                          <div 
-                            className="w-3 h-3 rounded-full flex-shrink-0" 
-                            style={{ backgroundColor: annotationData.colorMap[value] }}
-                          />
-                          <span className="text-muted-foreground truncate">
-                            {value} ({cellCounts[value] || 0})
-                          </span>
-                        </div>
-                      ))}
-                      {annotationData.values.length > 20 && (
-                        <div className="text-xs text-muted-foreground col-span-2">
-                          +{annotationData.values.length - 20} more...
-                        </div>
-                      )}
+            {/* Left controls stacked directly under the plot */}
+            <div className="space-y-4">
+              {/* Annotation Legend */}
+              {(() => {
+                const cellCounts: Record<string, number> = {};
+                dataset.cells.forEach(cell => {
+                  const val = annotationData.getCellValue(cell);
+                  cellCounts[val] = (cellCounts[val] || 0) + 1;
+                });
+                return (
+                  <div className="bg-card border border-border rounded-lg p-3">
+                    <h4 className="text-sm font-medium text-foreground mb-2">
+                      {selectedAnnotation.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())}
+                    </h4>
+                    <div className="max-h-32 overflow-y-auto">
+                      <div className="grid grid-cols-2 gap-1">
+                        {annotationData.values.slice(0, 20).map((value, idx) => (
+                          <div key={idx} className="flex items-center gap-2 text-xs">
+                            <div 
+                              className="w-3 h-3 rounded-full flex-shrink-0" 
+                              style={{ backgroundColor: annotationData.colorMap[value] }}
+                            />
+                            <span className="text-muted-foreground truncate">
+                              {value} ({cellCounts[value] || 0})
+                            </span>
+                          </div>
+                        ))}
+                        {annotationData.values.length > 20 && (
+                          <div className="text-xs text-muted-foreground col-span-2">
+                            +{annotationData.values.length - 20} more...
+                          </div>
+                        )}
+                      </div>
                     </div>
                   </div>
-                </div>
-              );
-            })()}
+                );
+              })()}
+
+              <CellFilter
+                cells={dataset.cells}
+                clusters={dataset.clusters}
+                filter={settings.cellFilter}
+                onFilterChange={(filter) => handleSettingsChange({ cellFilter: filter })}
+              />
+
+              <ClusterAnnotationTool
+                clusters={dataset.clusters}
+                onRenameCluster={handleRenameCluster}
+                onMergeClusters={handleMergeClusters}
+                onChangeClusterColor={handleChangeClusterColor}
+                onResetClusters={handleResetClusters}
+              />
+            </div>
           </div>
 
           {/* Right Plot - Gene Expression */}
-          <div className="space-y-4" data-tour="expression-plot">
-            <div className="p-3 bg-card border border-border rounded-lg">
-              <h3 className="font-semibold text-foreground">
+          <div className="flex flex-col gap-4" data-tour="expression-plot">
+            <div className="p-3 min-h-[66px] bg-card border border-border rounded-lg">
+              <h2 className="font-semibold text-foreground text-base">
                 Gene Expression
                 {effectiveGeneLabel && (
                   <span className="ml-2 text-primary font-mono text-sm">({effectiveGeneLabel})</span>
                 )}
-              </h3>
+                {plotGeneUndetected && (
+                  <span className="ml-2 text-xs font-medium uppercase tracking-wide text-muted-foreground border border-border rounded px-1.5 py-0.5">
+                    Not detected
+                  </span>
+                )}
+              </h2>
+              {plotGeneUndetected && (
+                <p className="text-xs text-muted-foreground mt-1" role="status">
+                  No expression recorded for {undetectedGenes.join(", ")} in this dataset — all cells are zero.
+                </p>
+              )}
             </div>
             
             <div className="h-[450px]">
@@ -431,6 +627,7 @@ const Index = () => {
                 cells={dataset.cells}
                 expressionData={expressionData}
                 selectedGene={effectiveGeneLabel}
+                expressionNotDetected={plotGeneUndetected}
                 pointSize={settings.pointSize}
                 showClusters={!effectiveGeneLabel}
                 showLabels={settings.showLabels}
@@ -445,65 +642,96 @@ const Index = () => {
                 onCellsSelected={handleCellsSelected}
               />
             </div>
-            
-            {/* Expression Level Legend */}
-            {effectiveGeneLabel && (
-              <div className="bg-card border border-border rounded-lg p-3">
-                <h4 className="text-sm font-medium text-foreground mb-2">Expression Level</h4>
-                <div className="flex items-center gap-2">
-                  <span className="text-xs text-muted-foreground">Low</span>
-                  <div
-                    className="flex-1 h-3 rounded"
-                    style={{ background: getPaletteGradientCSS(settings.colorPalette) }}
-                  />
-                  <span className="text-xs text-muted-foreground">High</span>
-                </div>
-                {settings.usePercentileClipping && (
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Clipped to {settings.percentileLow}–{settings.percentileHigh} percentile
+
+            {/* Right controls stacked directly under the plot */}
+            <div className="space-y-4">
+              {/* Gene Selection */}
+              <div
+                data-tour="gene-selection"
+                className={!geneSelectionUsable ? "opacity-60 pointer-events-none" : undefined}
+                aria-busy={!exprReady && !remoteError && !exprCancelled}
+              >
+                <GeneSelectionPanel
+                  genes={dataset.genes}
+                  settings={settings}
+                  onSettingsChange={handleSettingsChange}
+                />
+                {!exprReady && (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    {geneSelectionUsable
+                      ? "Showing demo expression values — your dataset could not be loaded."
+                      : remoteError || exprCancelled
+                        ? "Gene expression is unavailable — the expression matrix could not be loaded."
+                        : "Gene expression becomes available once the expression matrix finishes loading."}
                   </p>
                 )}
               </div>
-            )}
+
+              {/* Expression Level Legend */}
+              {effectiveGeneLabel && !plotGeneUndetected && (
+                <div className="bg-card border border-border rounded-lg p-3">
+                  <h4 className="text-sm font-medium text-foreground mb-2">Expression Level</h4>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs text-muted-foreground">Low</span>
+                    <div
+                      className="flex-1 h-3 rounded"
+                      style={{ background: getPaletteGradientCSS(settings.colorPalette) }}
+                    />
+                    <span className="text-xs text-muted-foreground">High</span>
+                  </div>
+                  {settings.usePercentileClipping && (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Clipped to {settings.percentileLow}–{settings.percentileHigh} percentile
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Display Options - expandable */}
+              <Collapsible
+                open={displayOptionsOpen}
+                onOpenChange={setDisplayOptionsOpen}
+                data-tour="display-options"
+              >
+                <div className="bg-card border border-border rounded-lg overflow-hidden">
+                  <CollapsibleTrigger asChild>
+                    <button className="w-full flex items-center justify-between p-3 text-left hover:bg-muted/50 transition-colors">
+                      <h3 className="text-sm font-semibold text-foreground">Display Options</h3>
+                      <ChevronDown
+                        className={`h-4 w-4 text-muted-foreground transition-transform ${displayOptionsOpen ? "rotate-180" : ""}`}
+                      />
+                    </button>
+                  </CollapsibleTrigger>
+                  <CollapsibleContent>
+                    <div className="px-3 pb-3">
+                      <DisplayOptions
+                        noCard
+                        clusters={dataset.clusters}
+                        settings={settings}
+                        onSettingsChange={handleSettingsChange}
+                      />
+                    </div>
+                  </CollapsibleContent>
+                </div>
+              </Collapsible>
+            </div>
           </div>
         </div>
 
-        {/* Filters, Gene Selection & Display Options */}
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div className="space-y-4">
-            <CellFilter
-              cells={dataset.cells}
-              clusters={dataset.clusters}
-              filter={settings.cellFilter}
-              onFilterChange={(filter) => handleSettingsChange({ cellFilter: filter })}
-            />
-            <div data-tour="gene-selection">
-              <GeneSelectionPanel
-                genes={dataset.genes}
-                settings={settings}
-                onSettingsChange={handleSettingsChange}
-              />
-            </div>
-            <ClusterAnnotationTool
-              clusters={dataset.clusters}
-              onRenameCluster={handleRenameCluster}
-              onMergeClusters={handleMergeClusters}
-              onChangeClusterColor={handleChangeClusterColor}
-              onResetClusters={handleResetClusters}
-            />
-          </div>
-          <div data-tour="display-options">
-            <DisplayOptions
-              clusters={dataset.clusters}
-              settings={settings}
-              onSettingsChange={handleSettingsChange}
-            />
-          </div>
-        </div>
 
         {/* Analysis Tabs */}
         <div className="space-y-6 mt-6" data-tour="analysis-tabs">
+            {undetectedGenes.length > 0 && (
+              <div className="bg-muted border border-border rounded-lg px-4 py-2" role="status">
+                <p className="text-xs text-muted-foreground">
+                  Not detected in this dataset:{" "}
+                  <span className="font-mono text-foreground">{undetectedGenes.join(", ")}</span>. Plots
+                  below show zero expression for {undetectedGenes.length > 1 ? "these genes" : "this gene"}.
+                </p>
+              </div>
+            )}
             <Tabs defaultValue="violin" className="w-full">
+
               <TabsList>
                 <TabsTrigger value="violin" disabled={!effectiveGeneLabel}>
                   Violin Plot
@@ -584,6 +812,7 @@ const Index = () => {
             <div data-tour="de-table">
               <DifferentialExpressionTable
                 data={dataset.differentialExpression}
+                clusters={dataset.clusters}
                 onGeneClick={handleGeneClick}
               />
             </div>

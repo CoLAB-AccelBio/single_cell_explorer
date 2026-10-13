@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { Info, Search, MousePointer2, Palette, BarChart3, GitCompareArrows, Play, Presentation } from "lucide-react";
+import { Info, Search, MousePointer2, Palette, BarChart3, GitCompareArrows, Play, Presentation, Database } from "lucide-react";
 import { Link } from "react-router-dom";
 import { DatasetMetadata } from "@/types/singleCell";
 import accelBioLogo from "@/assets/AccelBio_logo.png";
@@ -89,11 +89,20 @@ export function Header({ metadata, onStartTour }: HeaderProps) {
               <div className="h-8 w-px bg-border" />
               <div className="text-center">
                 <div className="text-lg font-semibold text-foreground">
-                  {metadata.clusterCount}
+                  {metadata.cellTypeCount}
                 </div>
-                <div className="text-xs text-muted-foreground">Clusters</div>
+                <div className="text-xs text-muted-foreground">Cell Types</div>
               </div>
             </div>
+
+            <Link
+              to="/dataset-swap"
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-secondary hover:bg-secondary/70 text-secondary-foreground text-sm font-medium transition-colors"
+              title="Switch or upload a dataset"
+            >
+              <Database className="h-3.5 w-3.5" />
+              Dataset
+            </Link>
 
             <Link
               to="/showcase"
@@ -118,6 +127,7 @@ export function Header({ metadata, onStartTour }: HeaderProps) {
             <button
               onClick={() => setGuideOpen(true)}
               className="p-2 rounded-lg hover:bg-secondary transition-colors"
+              aria-label="Open user guide"
             >
               <Info className="h-5 w-5 text-muted-foreground" />
             </button>
