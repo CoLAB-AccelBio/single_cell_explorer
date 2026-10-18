@@ -49,11 +49,6 @@ export function DotPlot({ cells, genes, clusters, expressionDataMap }: DotPlotPr
     () => Math.max(...dotData.map((d) => d.meanExpression), 1),
     [dotData]
   );
-  const maxPercent = useMemo(
-    () => Math.max(...dotData.map((d) => d.percentExpressing), 1),
-    [dotData]
-  );
-
   const dotSize = (percent: number) => {
     const normalized = Math.max(0, Math.min(100, percent)) / 100;
     return 4 + normalized * 20; // 4px to 24px

@@ -1,6 +1,6 @@
 import { ExpressionMatrix, SingleCellDataset } from "@/types/singleCell";
 import { parseSparseExpression, SparseGene } from "@/lib/msgpackSparse";
-import { SparseExpressionMatrix, matrixFromRecord } from "@/lib/expressionMatrix";
+import { SparseExpressionMatrix } from "@/lib/expressionMatrix";
 import { startPhase, getPeakHeapMB, trackHeap } from "@/lib/perf";
 import {
   getActiveSource,

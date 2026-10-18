@@ -170,3 +170,5 @@ This project is proprietary software developed by AccelBio.
 ## Correctness safeguards
 
 Split cores include ordered-cell and expression SHA-256 checksums; regenerate legacy custom split files before loading. The shipped legacy pair is pinned to its exact fingerprints. Expression summaries use filtered cells, means including zeros, and detection >0.1 in supplied units. Merging groups invalidates imported DE until recomputed upstream. Core and expression cancellation are stage-specific; expression retry preserves edits. Browser storage failure retains choices for the session with a warning. SVG export explicitly embeds raster PNG; 2× PNG is enlarged raster, not additional detail.
+
+Repair verification covers 45 regression tests and browser readback of uploaded and split-worker datasets, annotation changes, filtered summaries, raster exports and merged-DE invalidation. The full production matrix has not been stress-tested. The production dependency scan reports no known vulnerabilities; basic security checks are not a complete security assessment and automated deep security analysis was not run.
