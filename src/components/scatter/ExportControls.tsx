@@ -7,6 +7,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Download, Image, FileCode } from "lucide-react";
+import { embeddedRasterSvg, rasterDimensions } from '@/lib/rasterExport';
 
 interface ExportControlsProps {
   canvasRef: React.RefObject<HTMLCanvasElement>;
@@ -27,8 +28,6 @@ export function ExportControls({ canvasRef, filename = "scatter-plot" }: ExportC
     if (!ctx) return;
     
     // Fill white background
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
     
     // Draw original canvas content
     ctx.drawImage(canvas, 0, 0);
@@ -48,13 +47,7 @@ export function ExportControls({ canvasRef, filename = "scatter-plot" }: ExportC
     const dataUrl = canvas.toDataURL("image/png");
     
     // Create SVG wrapper with embedded image
-    const svgContent = `<?xml version="1.0" encoding="UTF-8"?>
-<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" 
-     width="${canvas.width}" height="${canvas.height}" viewBox="0 0 ${canvas.width} ${canvas.height}">
-  <title>${filename}</title>
-  <rect width="100%" height="100%" fill="white"/>
-  <image width="${canvas.width}" height="${canvas.height}" xlink:href="${dataUrl}"/>
-</svg>`;
+    const svgContent = embeddedRasterSvg(canvas.width, canvas.height, dataUrl);
 
     // Create download link
     const blob = new Blob([svgContent], { type: "image/svg+xml" });
@@ -73,15 +66,14 @@ export function ExportControls({ canvasRef, filename = "scatter-plot" }: ExportC
     // Create high-resolution canvas (2x)
     const scale = 2;
     const tempCanvas = document.createElement("canvas");
-    tempCanvas.width = canvas.width * scale;
-    tempCanvas.height = canvas.height * scale;
+    const size = rasterDimensions(canvas.width, canvas.height, scale);
+    tempCanvas.width = size.width;
+    tempCanvas.height = size.height;
     
     const ctx = tempCanvas.getContext("2d");
     if (!ctx) return;
     
     // Fill white background
-    ctx.fillStyle = "#ffffff";
-    ctx.fillRect(0, 0, tempCanvas.width, tempCanvas.height);
     
     // Scale and draw
     ctx.scale(scale, scale);
@@ -89,7 +81,7 @@ export function ExportControls({ canvasRef, filename = "scatter-plot" }: ExportC
     
     // Create download link
     const link = document.createElement("a");
-    link.download = `${filename}-highres.png`;
+    link.download = `${filename}-enlarged-2x.png`;
     link.href = tempCanvas.toDataURL("image/png", 1.0);
     link.click();
   };
@@ -109,11 +101,11 @@ export function ExportControls({ canvasRef, filename = "scatter-plot" }: ExportC
         </DropdownMenuItem>
         <DropdownMenuItem onClick={exportAsHighResPNG} className="gap-2 cursor-pointer">
           <Image className="h-4 w-4" />
-          Export as PNG (High-res)
+          Enlarged PNG (2× raster)
         </DropdownMenuItem>
         <DropdownMenuItem onClick={exportAsSVG} className="gap-2 cursor-pointer">
           <FileCode className="h-4 w-4" />
-          Export as SVG
+          SVG (embedded raster PNG)
         </DropdownMenuItem>
       </DropdownMenuContent>
     </DropdownMenu>
