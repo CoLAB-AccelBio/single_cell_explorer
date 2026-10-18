@@ -11,14 +11,12 @@ import { DifferentialExpressionTable } from "@/components/table/DifferentialExpr
 import { ViolinPlot } from "@/components/plots/ViolinPlot";
 import { FeaturePlot } from "@/components/plots/FeaturePlot";
 import { DotPlot } from "@/components/plots/DotPlot";
-import { PathwayEnrichment } from "@/components/analysis/PathwayEnrichment";
-import { TrajectoryAnalysis } from "@/components/analysis/TrajectoryAnalysis";
-import { PseudotimeHeatmap } from "@/components/analysis/PseudotimeHeatmap";
-import { calculatePseudotime } from "@/components/analysis/TrajectoryAnalysis";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 
 import { generateDemoDataset } from "@/data/demoData";
-import { fetchCoreDataset, fetchExpressionMatrix, LoadProgress } from "@/lib/datasetLoader";
+import { useDatasetLoading } from "@/hooks/useDatasetLoading";
+import { filterCells, mergeCellGroups } from "@/lib/expressionSummary";
+import { Button } from "@/components/ui/button";
 import { getExpressionData, getMultiGeneExpression, getAveragedExpression, getAnnotationValues, getAnnotationColorMap, calculatePercentile, getUndetectedGenes, isGeneUndetected } from "@/lib/expressionUtils";
 import { getPaletteGradientCSS } from "@/lib/colorPalettes";
 import { VisualizationSettings, SingleCellDataset, CellFilterState as CellFilterType, Cell, ClusterInfo, ColorPalette } from "@/types/singleCell";
@@ -78,121 +76,16 @@ const tourSteps: TourStep[] = [
 // Generate demo dataset as fallback
 const defaultDataset = generateDemoDataset(15000);
 
-// Wrapper that computes pseudotime for the heatmap using the first cluster as root
-const PseudotimeHeatmapWrapper: React.FC<{
-  cells: Cell[];
-  clusters: ClusterInfo[];
-  genes: string[];
-  dataset: SingleCellDataset;
-  colorPalette: ColorPalette;
-}> = ({ cells, clusters, genes, dataset, colorPalette }) => {
-  const pseudotimeMap = useMemo(() => calculatePseudotime(cells, 0), [cells]);
-  const expressionDataMap = useMemo(
-    () => getMultiGeneExpression(dataset, genes),
-    [dataset, genes]
-  );
-
-  return (
-    <PseudotimeHeatmap
-      cells={cells}
-      clusters={clusters}
-      genes={genes}
-      expressionDataMap={expressionDataMap}
-      pseudotimeMap={pseudotimeMap}
-      colorPalette={colorPalette}
-    />
-  );
-};
-
 const defaultCellFilter: CellFilterType = {
   selectedSamples: [],
   selectedClusters: [],
 };
 
 const Index = () => {
-  const [dataset, setDataset] = useState<SingleCellDataset>(defaultDataset);
-  const [isLoadingRemote, setIsLoadingRemote] = useState(true);
-  const [loadProgress, setLoadProgress] = useState<LoadProgress>({ phase: "downloading", percent: 0, message: "Initialising…" });
-  const [exprProgress, setExprProgress] = useState<LoadProgress | null>(null);
-  const [exprReady, setExprReady] = useState(false);
-  const [exprCancelled, setExprCancelled] = useState(false);
-  const [remoteError, setRemoteError] = useState<string | null>(null);
-  const [errorScope, setErrorScope] = useState<"core" | "expression" | null>(null);
+  const { dataset, setDataset, isLoadingRemote, loadProgress, exprProgress, exprReady, exprCancelled,
+    remoteError, errorScope, originalDatasetRef, handleCancelExpression, handleRetryExpression } = useDatasetLoading(defaultDataset);
   const [tourOpen, setTourOpen] = useState(false);
   const [displayOptionsOpen, setDisplayOptionsOpen] = useState(false);
-  const originalDatasetRef = useRef<SingleCellDataset>(defaultDataset);
-  const coreLoadedRef = useRef(false);
-  const exprAbortRef = useRef<AbortController | null>(null);
-  const [exprAttempt, setExprAttempt] = useState(0);
-
-
-
-  // Load the small core dataset first so the dashboard renders quickly,
-  // then stream the expression matrix in the background (cancellable).
-  useEffect(() => {
-    let cancelled = false;
-    const controller = new AbortController();
-    exprAbortRef.current = controller;
-
-    fetchCoreDataset((p) => setLoadProgress(p))
-      .then((core) => {
-        if (cancelled) return;
-        coreLoadedRef.current = true;
-        setDataset((prev) => (prev.expression ? { ...core, expression: prev.expression } : core));
-        originalDatasetRef.current = core;
-        setIsLoadingRemote(false);
-
-        setExprCancelled(false);
-        setExprProgress({ phase: "downloading", percent: 0, message: "Downloading expression matrix…" });
-
-        return fetchExpressionMatrix(
-          core.cells.map((c) => c.id),
-          (p) => {
-            if (!cancelled) setExprProgress(p);
-          },
-          controller.signal
-        ).then((expression) => {
-          if (cancelled) return;
-          setDataset((prev) => ({ ...prev, expression }));
-          originalDatasetRef.current = { ...originalDatasetRef.current, expression };
-          setExprReady(true);
-          setExprProgress(null);
-        });
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        const aborted =
-          (err instanceof DOMException && err.name === "AbortError") ||
-          controller.signal.aborted;
-        setExprProgress(null);
-        setIsLoadingRemote(false);
-        if (aborted) {
-          setExprCancelled(true);
-          return;
-        }
-        const msg = err instanceof Error ? err.message : String(err);
-        console.error("Failed to load remote dataset:", msg);
-        setRemoteError(msg);
-        setErrorScope(coreLoadedRef.current ? "expression" : "core");
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [exprAttempt]);
-
-  const handleCancelExpression = useCallback(() => {
-    exprAbortRef.current?.abort();
-    setExprProgress(null);
-    setExprCancelled(true);
-  }, []);
-
-  const handleRetryExpression = useCallback(() => {
-    setExprCancelled(false);
-    setRemoteError(null);
-    setErrorScope(null);
-    setExprAttempt((n) => n + 1);
-  }, []);
 
   // The demo fallback carries synthetic expression, so gene selection stays
   // usable when the core dataset itself failed to download.
@@ -280,19 +173,6 @@ const Index = () => {
 
 
 
-  const handleDatasetLoad = useCallback((newDataset: SingleCellDataset) => {
-    setDataset(newDataset);
-    originalDatasetRef.current = newDataset;
-    setSettings(prev => ({ ...prev, selectedGene: null, selectedGenes: [], cellFilter: defaultCellFilter }));
-    // Set default annotation if cell_type exists
-    const annotations = newDataset.annotationOptions || [];
-    if (annotations.includes("cell_type")) {
-      setSelectedAnnotation("cell_type");
-    } else if (annotations.length > 0) {
-      setSelectedAnnotation(annotations[0]);
-    }
-  }, []);
-
   // Cluster annotation handlers
   const handleRenameCluster = useCallback((clusterId: number, newName: string) => {
     setDataset(prev => ({
@@ -309,33 +189,8 @@ const Index = () => {
   }, []);
 
   const handleMergeClusters = useCallback((sourceIds: number[], targetId: number, mergedName: string) => {
-    setDataset(prev => {
-      // Reassign cells from source clusters to target
-      const newCells = prev.cells.map(cell =>
-        sourceIds.includes(cell.cluster)
-          ? { ...cell, cluster: targetId, metadata: { ...cell.metadata, cell_type: mergedName } }
-          : cell
-      );
-
-      // Update target cluster name and remove source clusters
-      const targetCluster = prev.clusters.find(c => c.id === targetId);
-      const mergedCellCount = newCells.filter(c => c.cluster === targetId).length;
-      
-      const newClusters = prev.clusters
-        .filter(c => !sourceIds.includes(c.id))
-        .map(c =>
-          c.id === targetId
-            ? { ...c, name: mergedName, cellCount: mergedCellCount }
-            : c
-        );
-
-      return {
-        ...prev,
-        cells: newCells,
-        clusters: newClusters,
-        metadata: { ...prev.metadata, clusterCount: newClusters.length },
-      };
-    });
+    setDataset(prev => mergeCellGroups(prev, sourceIds, targetId, mergedName));
+    setSettings(prev => ({ ...prev, cellFilter: { ...prev.cellFilter, selectedClusters: [] } }));
   }, []);
 
   const handleChangeClusterColor = useCallback((clusterId: number, newColor: string) => {
@@ -356,7 +211,7 @@ const Index = () => {
   }, []);
 
   const clusterNames = useMemo(
-    () => dataset.clusters.map((c) => c.name),
+    () => Object.fromEntries(dataset.clusters.map(c => [c.id, c.name])),
     [dataset.clusters]
   );
 
@@ -384,19 +239,20 @@ const Index = () => {
     
     const values = getAnnotationValues(dataset.cells, selectedAnnotation);
     const colorMap = getAnnotationColorMap(values);
+    if (selectedAnnotation === "cell_type") dataset.clusters.forEach(c => { colorMap[c.name] = c.color; });
     
     return {
       values,
       colorMap,
-      getCellValue: (cell: Cell) => String(cell.metadata[selectedAnnotation] || "Unknown"),
+      getCellValue: (cell: Cell) => String(cell.metadata[selectedAnnotation] ?? "Unknown"),
     };
   }, [dataset, selectedAnnotation]);
 
-  // Get genes from selected cells for pathway analysis
-  const selectedCellGenes = useMemo(() => {
-    if (selectedCells.length === 0) return settings.selectedGenes || [];
-    return settings.selectedGenes || [];
-  }, [selectedCells.length, settings.selectedGenes]);
+  const analysisCells = useMemo(() => filterCells(dataset.cells, settings.cellFilter), [dataset.cells, settings.cellFilter]);
+  const analysisClusters = useMemo(() => dataset.clusters.filter(c => analysisCells.some(cell => cell.cluster === c.id)), [dataset.clusters, analysisCells]);
+  const clusterAnnotation = useMemo(() => ({ values: dataset.clusters.map(c => c.name),
+    colorMap: Object.fromEntries(dataset.clusters.map(c => [String(c.id), c.color])),
+    getCellValue: (cell: Cell) => String(cell.cluster) }), [dataset.clusters]);
 
   const handleCellsSelected = useCallback((cells: Cell[]) => {
     setSelectedCells(cells);
@@ -425,7 +281,7 @@ const Index = () => {
           className="text-xs text-muted-foreground underline hover:text-foreground"
         >
           Cancel download
-        </button>
+        </Button>
       </div>
     );
   }
@@ -446,12 +302,12 @@ const Index = () => {
               : "Cells and annotations are shown from the real dataset, but gene expression is unavailable — no expression values are displayed."}
           </p>
 
-          <button
+          <Button variant="link"
             onClick={handleRetryExpression}
             className="mt-2 text-xs font-medium text-primary underline hover:no-underline"
           >
             Retry
-          </button>
+          </Button>
         </div>
       )}
       {exprProgress && (
@@ -471,12 +327,12 @@ const Index = () => {
             <p className="text-xs text-muted-foreground w-10 text-right">
               {exprProgress.percent}%
             </p>
-            <button
+            <Button variant="link"
               onClick={handleCancelExpression}
               className="text-xs text-muted-foreground underline hover:text-foreground whitespace-nowrap"
             >
               Cancel
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -484,14 +340,14 @@ const Index = () => {
         <div className="bg-muted border-b border-border px-4 py-2">
           <div className="container mx-auto flex items-center justify-center gap-3">
             <p className="text-xs text-muted-foreground">
-              Expression matrix download cancelled — gene expression features are unavailable.
+              {errorScope === "core" ? "Dataset download cancelled — showing illustrative demo data." : "Expression matrix download cancelled — gene expression features are unavailable."}
             </p>
-            <button
+            <Button variant="link"
               onClick={handleRetryExpression}
               className="text-xs font-medium text-primary underline hover:no-underline"
             >
               Resume download
-            </button>
+            </Button>
           </div>
         </div>
       )}
@@ -639,6 +495,7 @@ const Index = () => {
                 colorPalette={settings.colorPalette}
                 clusterNames={clusterNames}
                 cellFilter={settings.cellFilter}
+                annotationData={clusterAnnotation}
                 onCellsSelected={handleCellsSelected}
               />
             </div>
@@ -695,18 +552,18 @@ const Index = () => {
               >
                 <div className="bg-card border border-border rounded-lg overflow-hidden">
                   <CollapsibleTrigger asChild>
-                    <button className="w-full flex items-center justify-between p-3 text-left hover:bg-muted/50 transition-colors">
+                    <Button variant="ghost" className="h-auto w-full flex items-center justify-between p-3 text-left hover:bg-muted/50 transition-colors">
                       <h3 className="text-sm font-semibold text-foreground">Display Options</h3>
                       <ChevronDown
                         className={`h-4 w-4 text-muted-foreground transition-transform ${displayOptionsOpen ? "rotate-180" : ""}`}
                       />
-                    </button>
+                    </Button>
                   </CollapsibleTrigger>
                   <CollapsibleContent>
                     <div className="px-3 pb-3">
                       <DisplayOptions
                         noCard
-                        clusters={dataset.clusters}
+                        clusters={analysisClusters}
                         settings={settings}
                         onSettingsChange={handleSettingsChange}
                       />
@@ -730,6 +587,7 @@ const Index = () => {
                 </p>
               </div>
             )}
+            <p className="text-xs text-muted-foreground">Expression summaries: {analysisCells.length.toLocaleString()} filtered cells. Mean includes zeros; detection &gt; 0.1 in supplied expression units.</p>
             <Tabs defaultValue="violin" className="w-full">
 
               <TabsList>
@@ -742,19 +600,13 @@ const Index = () => {
                 <TabsTrigger value="dotplot">
                   Dot Plot
                 </TabsTrigger>
-                {/* <TabsTrigger value="enrichment">
-                  Pathway Enrichment
-                </TabsTrigger>
-                <TabsTrigger value="trajectory">
-                  Trajectory
-                </TabsTrigger> */}
               </TabsList>
               <TabsContent value="violin">
                 {effectiveGeneLabel && expressionData ? (
                   <ViolinPlot 
-                    cells={dataset.cells} 
+                    cells={analysisCells} 
                     gene={effectiveGeneLabel} 
-                    clusters={dataset.clusters}
+                    clusters={analysisClusters}
                     expressionData={expressionData}
                   />
                 ) : (
@@ -766,9 +618,9 @@ const Index = () => {
               <TabsContent value="feature">
                 {effectiveGeneLabel && expressionData ? (
                   <FeaturePlot 
-                    cells={dataset.cells} 
+                    cells={analysisCells} 
                     gene={effectiveGeneLabel} 
-                    clusters={dataset.clusters}
+                    clusters={analysisClusters}
                     expressionData={expressionData}
                   />
                 ) : (
@@ -779,42 +631,24 @@ const Index = () => {
               </TabsContent>
               <TabsContent value="dotplot">
                 <DotPlot
-                  cells={dataset.cells}
+                  cells={analysisCells}
                   genes={settings.selectedGenes || []}
-                  clusters={dataset.clusters}
+                  clusters={analysisClusters}
                   expressionDataMap={multiGeneExpressionData}
                 />
-              </TabsContent>
-              <TabsContent value="enrichment">
-                <PathwayEnrichment
-                  genes={selectedCellGenes}
-                  onGeneClick={handleGeneClick}
-                />
-              </TabsContent>
-              <TabsContent value="trajectory">
-                <div className="space-y-6">
-                  <TrajectoryAnalysis
-                    cells={dataset.cells}
-                    clusters={dataset.clusters}
-                  />
-                  <PseudotimeHeatmapWrapper
-                    cells={dataset.cells}
-                    clusters={dataset.clusters}
-                    genes={settings.selectedGenes || []}
-                    dataset={dataset}
-                    colorPalette={settings.colorPalette}
-                  />
-                </div>
               </TabsContent>
             </Tabs>
 
             {/* Differential Expression Table */}
             <div data-tour="de-table">
+              {dataset.differentialExpressionInvalidated ? (
+                <p role="status" className="text-sm text-muted-foreground">Differential expression is unavailable after merging cell types. Recompute results in Seurat or Scanpy and reload the dataset.</p>
+              ) : <><p className="text-xs text-muted-foreground mb-2">Imported differential-expression statistics from the original dataset; not recalculated for cell filters.</p>
               <DifferentialExpressionTable
                 data={dataset.differentialExpression}
                 clusters={dataset.clusters}
                 onGeneClick={handleGeneClick}
-              />
+              /></>}
             </div>
           </div>
 

@@ -1,6 +1,8 @@
 import React, { useMemo } from "react";
 import { Cell, ClusterInfo } from "@/types/singleCell";
 
+import { summarizeExpression } from "@/lib/expressionSummary";
+
 interface FeaturePlotProps {
   cells: Cell[];
   gene: string;
@@ -14,15 +16,8 @@ export function FeaturePlot({ cells, gene, clusters, expressionData, height = 20
     return clusters.map(cluster => {
       const clusterCells = cells.filter(c => c.cluster === cluster.id);
       const values = clusterCells.map(c => expressionData.get(c.id) ?? 0);
-      const expressing = values.filter(v => v > 0.5);
-      
-      const meanExpr = values.length > 0 
-        ? values.reduce((a, b) => a + b, 0) / values.length 
-        : 0;
-      const pctExpressing = values.length > 0 
-        ? (expressing.length / values.length) * 100 
-        : 0;
-        
+      const { meanExpression: meanExpr, percentExpressing: pctExpressing } = summarizeExpression(values);
+
       return {
         clusterId: cluster.id,
         clusterName: cluster.name,
