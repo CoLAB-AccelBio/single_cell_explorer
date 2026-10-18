@@ -6,6 +6,10 @@ import { CellTooltip } from "./CellTooltip";
 import { ExportControls } from "./ExportControls";
 import { SelectionTools, SelectionMode } from "./SelectionTools";
 
+import { parseColorToRGBA, visualizationColor } from "@/lib/scatterColors";
+import { filterCells } from "@/lib/expressionSummary";
+import { Button } from "@/components/ui/button";
+
 interface AnnotationData {
   values: string[];
   colorMap: Record<string, string>;
@@ -27,55 +31,13 @@ interface ScatterPlotProps {
   percentileLow?: number;
   percentileHigh?: number;
   colorPalette?: ColorPalette;
-  clusterNames: string[];
+  clusterNames: Record<number, string>;
   cellFilter?: CellFilterState;
   annotationData?: AnnotationData;
   onCellHover?: (cell: Cell | null) => void;
   onCellClick?: (cell: Cell) => void;
   onCellsSelected?: (cells: Cell[]) => void;
 }
-
-// Parse color string to RGBA
-function parseColorToRGBA(color: string, alpha: number = 1): [number, number, number, number] {
-  // Handle rgb(r, g, b) format
-  const rgbMatch = color.match(/rgb\((\d+),\s*(\d+),\s*(\d+)\)/);
-  if (rgbMatch) {
-    return [parseInt(rgbMatch[1]), parseInt(rgbMatch[2]), parseInt(rgbMatch[3]), Math.floor(alpha * 255)];
-  }
-  
-  // Handle hsl(h, s%, l%) format
-  const hslMatch = color.match(/hsl\((\d+),\s*(\d+)%,\s*(\d+)%\)/);
-  if (hslMatch) {
-    const h = parseInt(hslMatch[1]) / 360;
-    const s = parseInt(hslMatch[2]) / 100;
-    const l = parseInt(hslMatch[3]) / 100;
-    
-    let r, g, b;
-    if (s === 0) {
-      r = g = b = l;
-    } else {
-      const hue2rgb = (p: number, q: number, t: number) => {
-        if (t < 0) t += 1;
-        if (t > 1) t -= 1;
-        if (t < 1/6) return p + (q - p) * 6 * t;
-        if (t < 1/2) return q;
-        if (t < 2/3) return p + (q - p) * (2/3 - t) * 6;
-        return p;
-      };
-      const q = l < 0.5 ? l * (1 + s) : l + s - l * s;
-      const p = 2 * l - q;
-      r = hue2rgb(p, q, h + 1/3);
-      g = hue2rgb(p, q, h);
-      b = hue2rgb(p, q, h - 1/3);
-    }
-    return [Math.round(r * 255), Math.round(g * 255), Math.round(b * 255), Math.floor(alpha * 255)];
-  }
-  
-  // Default fallback
-  return [100, 140, 200, Math.floor(alpha * 255)];
-}
-
-// expressionToColor is now imported from @/lib/colorPalettes
 
 // Check if point is inside polygon (ray casting)
 function pointInPolygon(x: number, y: number, polygon: { x: number; y: number }[]): boolean {
@@ -140,19 +102,7 @@ export function ScatterPlot({
   const [selectedCells, setSelectedCells] = useState<Set<string>>(new Set());
 
   // Filter cells based on cellFilter
-  const filteredCells = useMemo(() => {
-    if (!cellFilter) return cells;
-    
-    return cells.filter((cell) => {
-      const sampleMatch =
-        cellFilter.selectedSamples.length === 0 ||
-        cellFilter.selectedSamples.includes(cell.metadata.sample as string);
-      const clusterMatch =
-        cellFilter.selectedClusters.length === 0 ||
-        cellFilter.selectedClusters.includes(cell.cluster);
-      return sampleMatch && clusterMatch;
-    });
-  }, [cells, cellFilter]);
+  const filteredCells = useMemo(() => filterCells(cells, cellFilter), [cells, cellFilter]);
 
   // Calculate data bounds (use all cells for consistent view)
   const bounds = useMemo(() => {
@@ -169,8 +119,8 @@ export function ScatterPlot({
     });
     
     const padding = 0.1;
-    const rangeX = maxX - minX;
-    const rangeY = maxY - minY;
+    const rangeX = maxX - minX || 1;
+    const rangeY = maxY - minY || 1;
     
     return {
       minX: minX - rangeX * padding,
@@ -278,11 +228,11 @@ export function ScatterPlot({
     if (!ctx) return;
     
     // Clear canvas
-    ctx.fillStyle = "#ffffff";
+    ctx.fillStyle = visualizationColor("--viz-background");
     ctx.fillRect(0, 0, dimensions.width, dimensions.height);
     
     // Draw grid
-    ctx.strokeStyle = "#e5e7eb";
+    ctx.strokeStyle = visualizationColor("--viz-grid");
     ctx.lineWidth = 1;
     
     const gridSpacing = 20;
@@ -338,7 +288,7 @@ export function ScatterPlot({
       
       // Highlight selected cells
       if (isSelected) {
-        ctx.fillStyle = `rgba(255, 200, 0, 0.9)`;
+        ctx.fillStyle = visualizationColor("--accent");
         ctx.beginPath();
         ctx.arc(pos.x, pos.y, scaledPointSize + 2, 0, Math.PI * 2);
         ctx.fill();
@@ -362,8 +312,8 @@ export function ScatterPlot({
         
         // Draw label background with higher opacity when expression is shown
         const bgOpacity = selectedGene ? 0.95 : 0.9;
-        ctx.fillStyle = `rgba(255, 255, 255, ${bgOpacity})`;
-        ctx.strokeStyle = selectedGene ? "rgba(0, 0, 0, 0.5)" : "rgba(0, 0, 0, 0.3)";
+        ctx.fillStyle = visualizationColor("--viz-background");
+        ctx.strokeStyle = visualizationColor("--viz-axis");
         ctx.lineWidth = selectedGene ? 1.5 : 1;
         
         const labelText = id.toString();
@@ -378,15 +328,15 @@ export function ScatterPlot({
         ctx.stroke();
         
         // Draw label text
-        ctx.fillStyle = "#1f2937";
+        ctx.fillStyle = visualizationColor("--viz-label");
         ctx.fillText(labelText, pos.x, pos.y);
       });
     }
     
     // Draw selection overlay
     if (isSelecting) {
-      ctx.strokeStyle = "rgba(59, 130, 246, 0.8)";
-      ctx.fillStyle = "rgba(59, 130, 246, 0.1)";
+      ctx.strokeStyle = visualizationColor("--primary");
+      ctx.fillStyle = visualizationColor("--secondary");
       ctx.lineWidth = 2;
       ctx.setLineDash([5, 5]);
       
@@ -412,7 +362,7 @@ export function ScatterPlot({
     }
     
     // Draw axes labels
-    ctx.fillStyle = "#6b7280";
+    ctx.fillStyle = visualizationColor("--viz-axis");
     ctx.font = "12px Inter, sans-serif";
     ctx.textAlign = "center";
     ctx.fillText("tSNE1", dimensions.width / 2, dimensions.height - 10);
@@ -423,7 +373,7 @@ export function ScatterPlot({
     ctx.fillText("tSNE2", 0, 0);
     ctx.restore();
     
-  }, [filteredCells, expressionData, selectedGene, pointSize, showClusters, showLabels, opacity, expressionScale, colorPalette, dimensions, bounds, expressionBounds, clusterCenters, transform, dataToCanvas, selectedCells, isSelecting, selectionMode, lassoPoints, rectSelection]);
+  }, [filteredCells, expressionData, selectedGene, pointSize, showClusters, showLabels, opacity, expressionScale, colorPalette, dimensions, bounds, expressionBounds, clusterCenters, transform, dataToCanvas, selectedCells, isSelecting, selectionMode, lassoPoints, rectSelection, annotationData]);
 
   // Handle resize
   useEffect(() => {
@@ -610,25 +560,25 @@ export function ScatterPlot({
       
       {/* Zoom controls */}
       <div className="absolute bottom-4 right-4 flex flex-col gap-1">
-        <button
+        <Button variant="outline" size="sm"
           onClick={() => setTransform(prev => ({ ...prev, scale: Math.min(10, prev.scale * 1.2) }))}
           className="w-8 h-8 rounded bg-card border border-border flex items-center justify-center text-foreground hover:bg-secondary transition-colors"
         >
           +
-        </button>
-        <button
+        </Button>
+        <Button variant="outline" size="sm"
           onClick={() => setTransform(prev => ({ ...prev, scale: Math.max(0.5, prev.scale / 1.2) }))}
           className="w-8 h-8 rounded bg-card border border-border flex items-center justify-center text-foreground hover:bg-secondary transition-colors"
         >
           −
-        </button>
-        <button
+        </Button>
+        <Button variant="outline" size="sm"
           onClick={handleDoubleClick}
           className="px-2 h-8 rounded bg-card border border-border flex items-center justify-center text-muted-foreground hover:bg-secondary transition-colors text-xs gap-1"
           title="Reset view"
         >
           ⌂ Reset
-        </button>
+        </Button>
       </div>
 
       {/* Not-detected overlay */}

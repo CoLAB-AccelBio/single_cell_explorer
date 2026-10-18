@@ -1,6 +1,8 @@
 import React, { useMemo } from "react";
 import { Cell, ClusterInfo } from "@/types/singleCell";
 
+import { summarizeExpression } from "@/lib/expressionSummary";
+
 interface DotPlotProps {
   cells: Cell[];
   genes: string[];
@@ -28,15 +30,7 @@ export function DotPlot({ cells, genes, clusters, expressionDataMap }: DotPlotPr
           (c) => expression.get(c.id) ?? 0
         );
 
-        const expressing = expressionValues.filter((v) => v > 0.1);
-        const percentExpressing =
-          clusterCells.length > 0
-            ? (expressing.length / clusterCells.length) * 100
-            : 0;
-        const meanExpression =
-          expressing.length > 0
-            ? expressing.reduce((a, b) => a + b, 0) / expressing.length
-            : 0;
+        const { meanExpression, percentExpressing } = summarizeExpression(expressionValues);
 
         data.push({
           gene,
@@ -55,13 +49,8 @@ export function DotPlot({ cells, genes, clusters, expressionDataMap }: DotPlotPr
     () => Math.max(...dotData.map((d) => d.meanExpression), 1),
     [dotData]
   );
-  const maxPercent = useMemo(
-    () => Math.max(...dotData.map((d) => d.percentExpressing), 1),
-    [dotData]
-  );
-
   const dotSize = (percent: number) => {
-    const normalized = percent / maxPercent;
+    const normalized = Math.max(0, Math.min(100, percent)) / 100;
     return 4 + normalized * 20; // 4px to 24px
   };
 
@@ -92,7 +81,7 @@ export function DotPlot({ cells, genes, clusters, expressionDataMap }: DotPlotPr
   return (
     <div className="bg-card border border-border rounded-lg p-4 overflow-auto">
       <h3 className="text-sm font-semibold text-foreground mb-4">
-        Dot Plot - Gene Expression by Cluster
+        Dot Plot - Gene Expression by Cell Type
       </h3>
 
       <div className="relative">

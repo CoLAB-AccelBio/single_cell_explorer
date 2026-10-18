@@ -22,6 +22,8 @@ import json
 import sys
 import os
 import time
+import hashlib
+import math
 
 def main():
     import msgpack  # imported here so the error message is clear if missing
@@ -51,6 +53,11 @@ def main():
     expression = data.pop("expression", None)
     if expression is None:
         print("WARNING: No 'expression' field found in dataset. Only core file will be created.")
+
+    cell_ids = [c["id"] for c in data.get("cells", [])]
+    if not cell_ids or len(set(cell_ids)) != len(cell_ids):
+        raise ValueError("Cells must have unique IDs")
+    data["cellIdsSha256"] = hashlib.sha256(json.dumps(cell_ids, separators=(",", ":"), ensure_ascii=False).encode("utf-8")).hexdigest()
 
     # --- Write core JSON (everything except expression) ---
     core_path = os.path.join(output_dir, "dataset_core.json")
@@ -83,6 +90,10 @@ def main():
         entries = []
         for cell_id, value in cell_values.items():
             total_entries += 1
+            if not isinstance(value, (float, int)) or isinstance(value, bool) or not math.isfinite(value):
+                raise ValueError(f"Invalid expression for {gene}/{cell_id}")
+            if cell_id not in cell_id_to_idx:
+                raise ValueError(f"Unknown expression cell {cell_id}")
             if value != 0:
                 nonzero_entries += 1
                 idx = cell_id_to_idx.get(cell_id)
@@ -101,6 +112,14 @@ def main():
     t0 = time.time()
     with open(expr_path, "wb") as f:
         msgpack.pack(sparse_expression, f, use_bin_type=True)
+    digest = hashlib.sha256()
+    with open(expr_path, "rb") as f:
+        for chunk in iter(lambda: f.read(1024 * 1024), b""):
+            digest.update(chunk)
+    data["expressionSha256"] = digest.hexdigest()
+    with open(core_path, "w") as f:
+        json.dump(data, f, separators=(",", ":"))
+    core_size = os.path.getsize(core_path)
     expr_size = os.path.getsize(expr_path)
     print(f"  Expression: {expr_size / 1e6:.1f} MB ({time.time() - t0:.1f}s)")
 

@@ -18,10 +18,11 @@
  */
 import { fetchJsonWithFallback, streamFetchBytes } from "@/lib/fetchStream";
 import { parseSparseExpression } from "@/lib/msgpackSparse";
+import { verifyExpressionBytes } from '@/lib/datasetIdentity';
 
 export type WorkerRequest =
   | { type: "core"; url: string; localUrl?: string }
-  | { type: "expression"; url: string; localUrl?: string };
+  | { type: "expression"; url: string; localUrl?: string; expectedSha256: string; cellCount: number };
 
 export type WorkerResponse =
   | { type: "progress"; phase: "downloading" | "parsing"; percent: number; message: string }
@@ -65,10 +66,11 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
       );
 
       progress("parsing", 0, "Decoding expression matrix…");
+      await verifyExpressionBytes(bytes, request.expectedSha256);
       const startedAt = performance.now();
       const sparse = parseSparseExpression(bytes, (fraction) =>
         progress("parsing", Math.round(fraction * 100), "Decoding expression matrix…")
-      );
+      , request.cellCount);
       const decodeMs = performance.now() - startedAt;
 
       const genes: string[] = [];

@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { Info, Search, MousePointer2, Palette, BarChart3, GitCompareArrows, Play, Presentation, Database } from "lucide-react";
 import { Link } from "react-router-dom";
+import { Button } from '@/components/ui/button';
 import { DatasetMetadata } from "@/types/singleCell";
 import accelBioLogo from "@/assets/AccelBio_logo.png";
 import {
@@ -45,7 +46,7 @@ const guideItems = [
     icon: GitCompareArrows,
     title: "Differential Expression",
     description:
-      "After selecting cells with the lasso tool, run a differential expression analysis to find marker genes for the selected population.",
+      "Browse imported marker-gene statistics from the original dataset. Filters do not recalculate these results; merging cell types requires recomputing them in Seurat or Scanpy.",
   },
 ];
 
@@ -55,7 +56,7 @@ export function Header({ metadata, onStartTour }: HeaderProps) {
   return (
     <header className="border-b border-border bg-card" data-tour="header">
       <div className="container mx-auto px-4 py-3">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-4">
             <img
               src={accelBioLogo}
@@ -71,7 +72,7 @@ export function Header({ metadata, onStartTour }: HeaderProps) {
             </div>
           </div>
 
-          <div className="flex items-center gap-6">
+          <div className="flex flex-wrap items-center gap-2 md:gap-6">
             <div className="hidden md:flex items-center gap-6">
               <div className="text-center">
                 <div className="text-lg font-semibold text-foreground">
@@ -114,23 +115,23 @@ export function Header({ metadata, onStartTour }: HeaderProps) {
             </Link>
 
             {onStartTour && (
-              <button
+              <Button variant="ghost" size="sm"
                 onClick={onStartTour}
                 className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-primary/10 hover:bg-primary/20 text-primary text-sm font-medium transition-colors"
                 title="Start guided tour"
               >
                 <Play className="h-3.5 w-3.5" />
                 Tour
-              </button>
+              </Button>
             )}
 
-            <button
+            <Button variant="ghost" size="icon"
               onClick={() => setGuideOpen(true)}
               className="p-2 rounded-lg hover:bg-secondary transition-colors"
               aria-label="Open user guide"
             >
               <Info className="h-5 w-5 text-muted-foreground" />
-            </button>
+            </Button>
           </div>
         </div>
       </div>

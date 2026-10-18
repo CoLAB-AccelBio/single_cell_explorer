@@ -7,11 +7,13 @@ import Index from "./pages/Index";
 import Showcase from "./pages/Showcase";
 import DatasetSwap from "./pages/DatasetSwap";
 import NotFound from "./pages/NotFound";
+import { Helmet } from 'react-helmet-async';
 
 const queryClient = new QueryClient();
 
 const App = () => (
   <QueryClientProvider client={queryClient}>
+    <Helmet><link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" /></Helmet>
     <TooltipProvider>
       <Toaster />
       <Sonner />
