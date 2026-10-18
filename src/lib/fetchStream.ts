@@ -6,12 +6,14 @@
 /** Try remote URL first, fall back to local when one is provided. */
 export async function fetchJsonWithFallback(
   remoteUrl: string,
-  localUrl?: string
+  localUrl?: string,
+  signal?: AbortSignal
 ): Promise<unknown> {
   try {
-    const resp = await fetch(remoteUrl);
+    const resp = await fetch(remoteUrl, { signal });
     if (resp.ok) return await resp.json();
   } catch {
+    if (signal?.aborted) throw new DOMException("Download cancelled", "AbortError");
     /* fall through */
   }
 
@@ -19,7 +21,7 @@ export async function fetchJsonWithFallback(
     throw new Error(`Could not load the core dataset from ${remoteUrl}`);
   }
 
-  const resp = await fetch(localUrl);
+  const resp = await fetch(localUrl, { signal });
   if (!resp.ok) {
     throw new Error(
       `Could not load the core dataset from either ${remoteUrl} or ${localUrl}`
@@ -91,16 +93,18 @@ export async function streamFetchBytes(
 
   try {
     // Fast path: single preallocated buffer (no second copy)
-    if (contentLength > 0) {
+    if (Number.isSafeInteger(contentLength) && contentLength > 0 && contentLength <= 512 * 1024 * 1024) {
       const buffer = new Uint8Array(contentLength);
       let overflow: Uint8Array[] | null = null;
+      let filledPrefix = 0;
 
       while (true) {
         const { done, value } = await reader.read();
         ensureLive();
         if (done) break;
-        if (receivedBytes + value.length <= contentLength) {
+        if (!overflow && receivedBytes + value.length <= contentLength) {
           buffer.set(value, receivedBytes);
+          filledPrefix += value.length;
         } else {
           // Server under-reported the size; keep the tail separately
           (overflow ||= []).push(value);
@@ -113,8 +117,8 @@ export async function streamFetchBytes(
       if (!overflow) return buffer.subarray(0, receivedBytes);
 
       const merged = new Uint8Array(receivedBytes);
-      merged.set(buffer.subarray(0, contentLength), 0);
-      let offset = contentLength;
+      merged.set(buffer.subarray(0, filledPrefix), 0);
+      let offset = filledPrefix;
       for (const chunk of overflow) {
         merged.set(chunk, offset);
         offset += chunk.length;

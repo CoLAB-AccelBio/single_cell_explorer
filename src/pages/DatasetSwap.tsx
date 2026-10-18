@@ -18,6 +18,7 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { toast } from "@/hooks/use-toast";
 import {
   DatasetSource,
+  isDatasetStorageUnavailable,
   addRemoteSource,
   addUploadedDataset,
   getEffectiveSourceId,
@@ -77,13 +78,14 @@ const DatasetSwap = () => {
     setCoreUrl("");
     setExprUrl("");
     setSelectedId(source.id);
-    toast({ title: "Dataset added", description: `"${source.name}" is ready to load.` });
+    toast({ title: "Dataset added", description: isDatasetStorageUnavailable() ? `"${source.name}" is available this session only — browser storage is unavailable.` : `"${source.name}" is ready to load.` });
   };
 
   const handleUpload = async (file: File) => {
     setUploading(true);
     setUploadError(null);
     try {
+      if (file.size > 500 * 1024 * 1024) throw new Error("This file is too large for a single upload. Split it into core and expression files and add their URLs instead.");
       const text = await file.text();
       const parsed = JSON.parse(text);
       const dataset = normalizeDataset(parsed);
@@ -145,6 +147,7 @@ const DatasetSwap = () => {
             </p>
           </div>
 
+          {isDatasetStorageUnavailable() && <Alert><AlertTitle>Session only</AlertTitle><AlertDescription>Browser storage is unavailable. Added datasets and choices will not survive a reload.</AlertDescription></Alert>}
           <div className="space-y-3">
             {sources.map((source) => {
               const isActive = source.id === activeId;

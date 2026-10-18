@@ -50,18 +50,13 @@ export function calculatePseudotime(cells: Cell[], rootCluster: number): Map<str
   if (!rootCenter) return pseudotimeMap;
   
   // Calculate pseudotime as distance from root center weighted by cluster progression
-  const maxDist = Math.max(...cells.map(cell => 
-    Math.sqrt(Math.pow(cell.x - rootCenter.x, 2) + Math.pow(cell.y - rootCenter.y, 2))
-  ));
-  
-  cells.forEach(cell => {
-    const dist = Math.sqrt(Math.pow(cell.x - rootCenter.x, 2) + Math.pow(cell.y - rootCenter.y, 2));
-    const normalizedDist = dist / maxDist;
-    // Add some noise for realism
-    const noise = (Math.random() - 0.5) * 0.1;
-    pseudotimeMap.set(cell.id, Math.max(0, Math.min(1, normalizedDist + noise)));
-  });
-  
+  let maxDist = 0;
+  for (const cell of cells) maxDist = Math.max(maxDist, Math.hypot(cell.x - rootCenter.x, cell.y - rootCenter.y));
+  for (const cell of cells) {
+    const dist = Math.hypot(cell.x - rootCenter.x, cell.y - rootCenter.y);
+    pseudotimeMap.set(cell.id, maxDist > 0 ? dist / maxDist : 0);
+  }
+
   return pseudotimeMap;
 }
 
@@ -151,7 +146,7 @@ export const TrajectoryAnalysis: React.FC<TrajectoryAnalysisProps> = ({
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [dimensions, setDimensions] = useState({ width: 600, height: 400 });
-  const [rootCluster, setRootCluster] = useState<number>(0);
+  const [rootCluster, setRootCluster] = useState<number>(clusters[0]?.id ?? 0);
   const [showCells, setShowCells] = useState(true);
   const [lineWidth, setLineWidth] = useState([3]);
 
@@ -195,7 +190,7 @@ export const TrajectoryAnalysis: React.FC<TrajectoryAnalysisProps> = ({
       maxY = Math.max(maxY, cell.y);
     });
     
-    const padding = Math.max(maxX - minX, maxY - minY) * 0.1;
+    const padding = Math.max(maxX - minX, maxY - minY, 1) * 0.1;
     return { 
       minX: minX - padding, 
       maxX: maxX + padding, 
@@ -289,7 +284,7 @@ export const TrajectoryAnalysis: React.FC<TrajectoryAnalysisProps> = ({
     // Draw trajectory nodes
     trajectory.nodes.forEach(node => {
       const pos = toCanvas(node.x, node.y);
-      const cluster = clusters[node.cluster];
+      const cluster = clusters.find(c => c.id === node.cluster);
       
       // Node circle
       ctx.fillStyle = cluster?.color || 'hsl(var(--primary))';
@@ -334,14 +329,14 @@ export const TrajectoryAnalysis: React.FC<TrajectoryAnalysisProps> = ({
     ctx.textAlign = 'right';
     ctx.fillText('Late', barX + barWidth, barY + barHeight + 12);
     ctx.textAlign = 'center';
-    ctx.fillText('Pseudotime', barX + barWidth / 2, barY - 5);
+    ctx.fillText('Embedding distance', barX + barWidth / 2, barY - 5);
 
   }, [cells, clusters, trajectory, pseudotimeMap, dimensions, bounds, showCells, lineWidth]);
 
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-lg">Trajectory / Pseudotime Analysis</CardTitle>
+        <CardTitle className="text-lg">Embedding-distance illustration</CardTitle>
       </CardHeader>
       <CardContent>
         <div className="flex flex-wrap gap-4 mb-4">
@@ -392,9 +387,7 @@ export const TrajectoryAnalysis: React.FC<TrajectoryAnalysisProps> = ({
 
         <div className="mt-4 text-xs text-muted-foreground">
           <p>
-            <strong>Trajectory analysis</strong> infers developmental lineages by computing pseudotime 
-            (cell progression from root) and connecting cluster centroids. Branching points indicate 
-            potential cell fate decisions. Select a root cluster representing the earliest developmental stage.
+            Illustrative embedding-distance score, not biological pseudotime or inferred cell-fate lineages.
           </p>
         </div>
       </CardContent>

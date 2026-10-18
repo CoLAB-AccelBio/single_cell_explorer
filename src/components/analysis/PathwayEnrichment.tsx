@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from "react";
+import React, { useState, useMemo, useEffect, useRef } from "react";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
@@ -81,7 +81,18 @@ export function PathwayEnrichment({ genes, onGeneClick }: PathwayEnrichmentProps
   const [results, setResults] = useState<{ go: EnrichmentResult[]; kegg: EnrichmentResult[] } | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const revision = useRef(0);
+  const geneKey = JSON.stringify(genes);
+  const [resultKey, setResultKey] = useState<string | null>(null);
+  useEffect(() => {
+    revision.current++;
+    setResults(null); setResultKey(null); setIsLoading(false); setError(null);
+    return () => { revision.current++; };
+  }, [geneKey]);
+
   const runEnrichment = async () => {
+    const request = ++revision.current;
+    setResults(null); setResultKey(null);
     if (genes.length === 0) return;
     
     setIsLoading(true);
@@ -93,11 +104,12 @@ export function PathwayEnrichment({ genes, onGeneClick }: PathwayEnrichmentProps
       
       // Use demo enrichment data
       const enrichmentResults = getDemoEnrichment(genes);
-      setResults(enrichmentResults);
+      if (request !== revision.current) return;
+      setResults(enrichmentResults); setResultKey(geneKey);
     } catch (err) {
       setError("Failed to run enrichment analysis. Please try again.");
     } finally {
-      setIsLoading(false);
+      if (request === revision.current) setIsLoading(false);
     }
   };
 
@@ -176,7 +188,7 @@ export function PathwayEnrichment({ genes, onGeneClick }: PathwayEnrichmentProps
         </div>
       )}
 
-      {results && (
+      {results && resultKey === geneKey && (
         <Tabs defaultValue="go" className="w-full">
           <TabsList className="grid w-full grid-cols-2">
             <TabsTrigger value="go">

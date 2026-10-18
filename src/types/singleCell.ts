@@ -54,6 +54,9 @@ export interface ExpressionMatrix {
 }
 
 export interface SingleCellDataset {
+  expressionSha256?: string;
+  cellIdsSha256?: string;
+  differentialExpressionInvalidated?: boolean;
   metadata: DatasetMetadata;
   cells: Cell[];
   genes: string[];
