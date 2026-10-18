@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback, useRef, useEffect } from "react";
+import React, { useState, useMemo, useCallback } from "react";
 import { Helmet } from "react-helmet-async";
 import { ChevronDown } from "lucide-react";
 import { Header } from "@/components/layout/Header";
@@ -97,7 +97,7 @@ const Index = () => {
 
 
   // Selected cells from lasso/rectangle selection
-  const [selectedCells, setSelectedCells] = useState<Cell[]>([]);
+  const [, setSelectedCells] = useState<Cell[]>([]);
   
   // Annotation selection for left plot
   const [selectedAnnotation, setSelectedAnnotation] = useState<string>("cell_type");
@@ -276,7 +276,7 @@ const Index = () => {
             <p className="text-xs text-muted-foreground text-center mt-1">{loadProgress.percent}%</p>
           )}
         </div>
-        <button
+        <Button variant="link"
           onClick={handleCancelExpression}
           className="text-xs text-muted-foreground underline hover:text-foreground"
         >
@@ -563,7 +563,7 @@ const Index = () => {
                     <div className="px-3 pb-3">
                       <DisplayOptions
                         noCard
-                        clusters={analysisClusters}
+                        clusters={dataset.clusters}
                         settings={settings}
                         onSettingsChange={handleSettingsChange}
                       />

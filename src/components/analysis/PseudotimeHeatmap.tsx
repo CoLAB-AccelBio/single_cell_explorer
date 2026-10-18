@@ -19,7 +19,7 @@ interface BinnedRow {
   values: number[]; // one per bin, smoothed mean expression
 }
 
-function buildHeatmapData(
+export function buildHeatmapData(
   cells: Cell[],
   genes: string[],
   expressionDataMap: Record<string, Map<string, number>>,
@@ -35,7 +35,7 @@ function buildHeatmapData(
     return { rows: [], globalMin: 0, globalMax: 1 };
   }
 
-  const binSize = Math.max(1, Math.floor(sortedCells.length / numBins));
+  const binCount = Math.min(sortedCells.length, Math.max(1, Math.floor(numBins)));
   let globalMin = Infinity;
   let globalMax = -Infinity;
 
@@ -43,9 +43,9 @@ function buildHeatmapData(
     const exprMap = expressionDataMap[gene];
     const values: number[] = [];
 
-    for (let b = 0; b < numBins; b++) {
-      const start = b * binSize;
-      const end = b === numBins - 1 ? sortedCells.length : (b + 1) * binSize;
+    for (let b = 0; b < binCount; b++) {
+      const start = Math.floor(b * sortedCells.length / binCount);
+      const end = Math.floor((b + 1) * sortedCells.length / binCount);
       let sum = 0;
       let count = 0;
 
@@ -146,7 +146,7 @@ export const PseudotimeHeatmap: React.FC<PseudotimeHeatmapProps> = ({
 
     const plotWidth = width - labelWidth - rightPadding;
     const plotHeight = genes.length * rowHeight;
-    const bins = numBins[0];
+    const bins = heatmapData.rows[0]?.values.length ?? 1;
     const cellWidth = plotWidth / bins;
 
     // Draw heatmap cells
@@ -200,7 +200,7 @@ export const PseudotimeHeatmap: React.FC<PseudotimeHeatmapProps> = ({
     ctx.fillStyle = "#374151";
     ctx.font = "11px sans-serif";
     ctx.textAlign = "center";
-    ctx.fillText("Pseudotime →", labelWidth + plotWidth / 2, axisY + 20);
+    ctx.fillText("Cell rank →", labelWidth + plotWidth / 2, axisY + 20);
 
     // Color legend (vertical bar on the right)
     const legendX = labelWidth + plotWidth + 12;
@@ -230,7 +230,7 @@ export const PseudotimeHeatmap: React.FC<PseudotimeHeatmapProps> = ({
     return (
       <Card>
         <CardHeader className="pb-2">
-          <CardTitle className="text-lg">Pseudotime Gene Expression Heatmap</CardTitle>
+          <CardTitle className="text-lg">Rank-binned Gene Expression Heatmap</CardTitle>
         </CardHeader>
         <CardContent>
           <div className="p-8 text-center text-muted-foreground">
@@ -244,7 +244,7 @@ export const PseudotimeHeatmap: React.FC<PseudotimeHeatmapProps> = ({
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="text-lg">Pseudotime Gene Expression Heatmap</CardTitle>
+        <CardTitle className="text-lg">Rank-binned Gene Expression Heatmap</CardTitle>
       </CardHeader>
       <CardContent>
         <div className="flex items-center gap-4 mb-4">
@@ -268,7 +268,7 @@ export const PseudotimeHeatmap: React.FC<PseudotimeHeatmapProps> = ({
         </div>
 
         <p className="mt-3 text-xs text-muted-foreground">
-          Each row shows a gene's expression level across pseudotime (left = early, right = late). 
+          Each row shows a gene's expression level across equal-count bins ordered by the supplied score (left = lower rank, right = higher rank). 
           Values are row-normalized for better contrast across genes with different expression ranges.
         </p>
       </CardContent>

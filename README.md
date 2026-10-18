@@ -17,8 +17,7 @@ An interactive web portal for exploring and visualizing single-cell RNA sequenci
 - **Feature Plots**: Bar charts showing mean expression and percentage of expressing cells per cluster
 - **Dot Plots**: Multi-gene expression comparison across clusters (size = % expressing, color = mean expression)
 - **Differential Expression Table**: Sortable, filterable table of marker genes per cluster
-- **Pathway Enrichment**: GO term and pathway analysis for selected genes
-- **Trajectory Analysis**: Pseudotime visualization for developmental lineages with branching paths
+- Dormant enrichment/trajectory demonstrations remain disabled and are not scientific analysis.
 
 ### Data Handling
 - **Cell Filtering**: Subset cells by sample, cluster, or other metadata
@@ -61,7 +60,7 @@ your Seurat/Scanpy object to the JSON format below, then split and compress it f
 
 
 ```bash
-python scripts/compress_dataset.py my_dataset.json public/
+python scripts/compress_dataset.py my_dataset.json --output-dir public/
 # -> public/dataset_core.json (small, loaded first)
 # -> public/dataset_expression.msgpack (sparse expression, streamed in background)
 ```
@@ -107,8 +106,7 @@ The expected input format:
   ],
   "expression": {
     "GENE1": {
-      "cell_1": 2.5,
-      "cell_2": 0.0
+      "cell_1": 2.5
     }
   },
   "annotationOptions": ["cell_type", "sample"]
@@ -168,3 +166,7 @@ This project is proprietary software developed by AccelBio.
 ---
 
 **Powered by [AccelBio](https://accelbio.pt/)**
+
+## Correctness safeguards
+
+Split cores include ordered-cell and expression SHA-256 checksums; regenerate legacy custom split files before loading. The shipped legacy pair is pinned to its exact fingerprints. Expression summaries use filtered cells, means including zeros, and detection >0.1 in supplied units. Merging groups invalidates imported DE until recomputed upstream. Core and expression cancellation are stage-specific; expression retry preserves edits. Browser storage failure retains choices for the session with a warning. SVG export explicitly embeds raster PNG; 2× PNG is enlarged raster, not additional detail.

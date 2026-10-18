@@ -37,7 +37,7 @@ write_json(list(
   metadata = list(name = "My dataset", organism = "Homo sapiens", tissue = "Heart"),
   cells    = cells,
   genes    = rownames(expr),
-  clusters = lapply(levels(Idents(obj)), function(cl) list(name = cl)),
+  clusters = lapply(levels(Idents(obj)), function(cl) list(id = as.integer(cl), name = cl)),
   expression = apply(expr, 1, function(v) as.list(setNames(v, colnames(expr)))),
   differentialExpression = list()   # optional: gene, cluster, logFC, pValue, pAdj
 ), "my_dataset.json", auto_unbox = TRUE, digits = 3)
@@ -60,7 +60,7 @@ data = {
                    "sample": str(ad.obs.get("sample", ["NA"] * ad.n_obs)[i])},
   } for i, bc in enumerate(ad.obs_names)],
   "genes": [str(g) for g in ad.var_names],
-  "clusters": [{"name": c} for c in ad.obs["leiden"].cat.categories],
+  "clusters": [{"id": i, "name": str(c)} for i, c in enumerate(ad.obs["leiden"].cat.categories)],
   "expression": {str(g): {str(b): round(float(X[i, j]), 3)
                           for i, b in enumerate(ad.obs_names) if X[i, j] != 0}
                  for j, g in enumerate(ad.var_names)},
@@ -76,7 +76,7 @@ becomes a selectable annotation.
 ## Step 2 — Split and compress it
 
 ```bash
-python3 scripts/compress_dataset.py my_dataset.json public/
+python3 scripts/compress_dataset.py my_dataset.json --output-dir public/
 ```
 
 This writes `public/dataset_core.json` (small, loads first) and
@@ -134,3 +134,7 @@ no hardcoded values to update.
 | Progress bar stuck at 50% | Host doesn't send `content-length`; the download still completes. |
 
 Timings (download, decode, peak heap) are logged to the browser console for QA.
+
+## Pair verification
+
+The compression script writes `cellIdsSha256` and `expressionSha256` into the core. Both files must be regenerated together; the app rejects unverified custom legacy files and mismatched matrices instead of attaching values to the wrong cells. All cells need unique nonempty IDs, finite numeric coordinates, integer group IDs referring to a declared group, and expression values referencing existing cells and listed genes.
