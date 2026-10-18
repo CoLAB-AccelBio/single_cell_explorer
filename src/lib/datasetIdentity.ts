@@ -1,9 +1,14 @@
 import type { SingleCellDataset } from '@/types/singleCell';
+import { sha256 as hashSha256 } from '@noble/hashes/sha2.js';
 const BUILTIN_CELLS = 'acddd2a7a862daf306ebaab542dad22b13e2b450b4ee31ddfd36eef3f538b1a1';
 const BUILTIN_EXPRESSION = '3ab8a17a4888c59db4ac4e9bc038b2a52fc195f6d1daed4334a156b60d2585de';
 export async function sha256(bytes: Uint8Array): Promise<string> {
-  const digest = await crypto.subtle.digest('SHA-256', bytes as Uint8Array<ArrayBuffer>);
-  return Array.from(new Uint8Array(digest), byte => byte.toString(16).padStart(2, '0')).join('');
+  // Incremental hashing avoids WebCrypto's extra full-size copy of large matrices.
+  const hash = hashSha256.create();
+  for (let offset = 0; offset < bytes.length; offset += 1024 * 1024) {
+    hash.update(bytes.subarray(offset, offset + 1024 * 1024));
+  }
+  return Array.from(hash.digest(), byte => byte.toString(16).padStart(2, '0')).join('');
 }
 export async function verifyCellOrder(core: SingleCellDataset, builtIn: boolean): Promise<string> {
   const actual = await sha256(new TextEncoder().encode(JSON.stringify(core.cells.map(c => c.id))));
