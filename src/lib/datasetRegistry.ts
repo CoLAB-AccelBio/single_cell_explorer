@@ -49,6 +49,10 @@ export const BUILT_IN_SOURCE: DatasetSource = {
 const uploadedDatasets = new Map<string, SingleCellDataset>();
 const uploadedSources: DatasetSource[] = [];
 
+let sessionCustom: DatasetSource[] | null = null;
+let persistenceUnavailable = false;
+export function isDatasetStorageUnavailable() { return persistenceUnavailable; }
+
 const listeners = new Set<() => void>();
 const notify = () => listeners.forEach((l) => l());
 
@@ -58,6 +62,7 @@ export function subscribeToSources(listener: () => void): () => void {
 }
 
 function readCustomSources(): DatasetSource[] {
+  if (sessionCustom) return sessionCustom;
   try {
     const raw = localStorage.getItem(CUSTOM_KEY);
     if (!raw) return [];
@@ -69,10 +74,11 @@ function readCustomSources(): DatasetSource[] {
 }
 
 function writeCustomSources(sources: DatasetSource[]) {
+  sessionCustom = sources;
   try {
     localStorage.setItem(CUSTOM_KEY, JSON.stringify(sources));
   } catch {
-    /* storage unavailable — keep going with in-memory state only */
+    persistenceUnavailable = true;
   }
 }
 
@@ -96,19 +102,20 @@ export function getActiveSourceId(): string {
 }
 
 export function getActiveSource(): DatasetSource {
-  return getDatasetSource(getActiveSourceId()) ?? BUILT_IN_SOURCE;
+  return getDatasetSource(getEffectiveSourceId()) ?? BUILT_IN_SOURCE;
 }
 
 /** Persist the active choice. Uploads are session-only, so they are not saved. */
 export function setActiveSourceId(id: string) {
   const source = getDatasetSource(id);
+  if (!source) throw new Error("Unknown dataset source");
+  activeOverride = id;
   try {
     if (source && source.kind === "uploaded") localStorage.removeItem(ACTIVE_KEY);
     else localStorage.setItem(ACTIVE_KEY, id);
   } catch {
-    /* ignore */
+    persistenceUnavailable = true;
   }
-  activeOverride = source?.kind === "uploaded" ? id : null;
   notify();
 }
 
@@ -127,7 +134,7 @@ export function addRemoteSource(input: {
   description?: string;
 }): DatasetSource {
   const source: DatasetSource = {
-    id: `remote-${Date.now().toString(36)}`,
+    id: `remote-${crypto.randomUUID()}`,
     name: input.name.trim() || "Custom dataset",
     description: input.description?.trim() || undefined,
     kind: "remote",
@@ -140,11 +147,12 @@ export function addRemoteSource(input: {
 }
 
 export function removeSource(id: string) {
+  const wasActive = getEffectiveSourceId() === id;
   writeCustomSources(readCustomSources().filter((s) => s.id !== id));
   const uploadIdx = uploadedSources.findIndex((s) => s.id === id);
   if (uploadIdx >= 0) uploadedSources.splice(uploadIdx, 1);
   uploadedDatasets.delete(id);
-  if (getEffectiveSourceId() === id) setActiveSourceId(BUILT_IN_SOURCE.id);
+  if (wasActive) setActiveSourceId(BUILT_IN_SOURCE.id);
   notify();
 }
 
@@ -153,7 +161,7 @@ export function addUploadedDataset(
   dataset: SingleCellDataset
 ): DatasetSource {
   const source: DatasetSource = {
-    id: `upload-${Date.now().toString(36)}`,
+    id: `upload-${crypto.randomUUID()}`,
     name,
     description: `Uploaded this session — ${dataset.cells.length.toLocaleString()} cells, ${dataset.genes.length.toLocaleString()} genes.`,
     kind: "uploaded",
